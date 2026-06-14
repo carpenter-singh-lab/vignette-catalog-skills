@@ -56,7 +56,7 @@ Run in order; stop and report on any failure.
 
 7. Fill `catalog.toml` with the orientation notebook's helper(s) and the data surface / auth.
 
-8. Validate: `bash scripts/validate-notebook.sh notebooks/nb01_orientation.py` (from the catalog-skills install), or run the launch/ruff/marimo-check/export sequence by hand.
+8. Validate with the `validate-notebook.sh` bundled in the installed `compose-notebook` skill, passing `notebooks/nb01_orientation.py`, or run the launch/ruff/marimo-check/export sequence by hand.
 
 9. `git add . && git commit -m "feat: initial catalog scaffold"`.
 

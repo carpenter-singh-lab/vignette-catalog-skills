@@ -40,13 +40,14 @@ Drive the kernel with the `marimo-pair` skill; if it is not running, run `gettin
    Do not fabricate numbers or describe outputs you have not run.
 
 4. **Validate - run, look, check, snapshot.**
-   Order matters. Use the bundled script:
+   Order matters.
+   Use the `scripts/validate-notebook.sh` bundled with this skill, passing the notebook path:
 
    ```bash
-   bash scripts/validate-notebook.sh notebooks/<topic>.py
+   bash <compose-notebook-skill-dir>/scripts/validate-notebook.sh notebooks/<topic>.py
    ```
 
-   It launches the notebook headless, runs every cell, runs `ruff` + `marimo check`, and - last, after the final edit - refreshes the molab session snapshot.
+   It runs `marimo check --fix`, runs `ruff` on that notebook, and - last, after the final source edit - executes the notebook and refreshes the molab session snapshot.
    Then open the notebook and inspect the outputs yourself; static checks miss empty tables, wrong signs, and plots that render but say nothing.
    Commit the regenerated `__marimo__/session/*.json` in the same change as the `.py`.
    The snapshot `code_hash` discipline and other traps are in [references/gotchas.md](references/gotchas.md).

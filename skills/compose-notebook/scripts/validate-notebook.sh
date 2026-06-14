@@ -7,7 +7,6 @@
 set -euo pipefail
 
 NB="${1:?usage: validate-notebook.sh notebooks/<topic>.py}"
-DIR="$(dirname "$NB")"
 
 # marimo check --fix first: it auto-resolves markdown-indentation (and other) warnings on
 # mo.md cells. Running it BEFORE ruff format means ruff then formats the fixed output, and the
@@ -15,9 +14,9 @@ DIR="$(dirname "$NB")"
 echo "==> marimo check --fix ($NB)"
 uvx marimo check --fix "$NB"
 
-echo "==> ruff check + format ($DIR)"
-uvx ruff check "$DIR"
-uvx ruff format "$DIR"
+echo "==> ruff check + format ($NB)"
+uvx ruff check "$NB"
+uvx ruff format "$NB"
 
 # Snapshot must be regenerated AFTER the final source/formatter edit (above), or molab
 # strips outputs on a code_hash mismatch. Executing the notebook here also surfaces

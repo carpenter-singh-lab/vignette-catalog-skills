@@ -91,7 +91,7 @@ Do not improvise alternative launch commands.
 
 ## Validation rule
 
-After composing or editing any notebook, run `validate-notebook.sh`, then open it and look at the outputs.
+After composing or editing any notebook, run the `validate-notebook.sh` bundled with the installed `compose-notebook` skill, passing the notebook path, then open it and look at the outputs.
 Static checks do not catch wrong outputs, empty tables, stale endpoints, broken plots, or sign-convention mistakes.
 
 ## Architecture
