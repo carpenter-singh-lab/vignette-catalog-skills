@@ -35,3 +35,7 @@ Commit small data (kilobytes); gitignore large data and the cache.
 | fgx | FinnGenie `/api/v1/*` REST via `httpx` | `FINNGENIE_TOKEN` in local `.env` | Live API reads; no committed cache |
 | prx | Bond et al. 2025 Figshare/Dryad via `pooch` | Public, no secret | Raw downloads under gitignored `data/`; SHA-256 pinned |
 | dmx | DepMap Breadbox REST via `requests` | Public read-only, no key | Live API reads; summarize large responses before display |
+
+A fifth surface, `files`, covers data committed straight into the repo - received once, version-controlled (small CSVs, a hand-transcribed plate map, a delivered table of kilobytes).
+There is no fetch, no cache, and no pooch hash: git *is* the integrity mechanism, so do not gitignore `data/` (see the scaffold `.gitignore` note).
+Choose it when the dataset is small and delivered rather than queried; reach for `rest`/`duckdb`/`pooch` only once the data is too large to commit.

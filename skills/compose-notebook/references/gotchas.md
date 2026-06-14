@@ -11,6 +11,8 @@ Any later edit - including a `ruff format` whitespace pass - shifts every hash a
 - Always regenerate snapshots **after** the final source/formatter edit.
 - Commit the regenerated `.json` in the same change that touched the `.py`.
 - A snapshot that fails to execute is a real bug in the notebook, not in the snapshot.
+- `marimo check` warns `markdown-indentation` on multi-line `mo.md("""...""")` cells; resolve it with `marimo check --fix` (one pass), not by hand - hand-indenting rarely matches what marimo wants. `validate-notebook.sh` runs `--fix` before the format + snapshot steps for this reason.
+- The snapshot only survives if `.gitignore` keeps the `!notebooks/__marimo__/session/*.json` exception. A blanket `__marimo__/` ignore - common in repos not scaffolded by this skill - silently drops the snapshots you just regenerated; reconcile it when adopting the pattern in an existing repo.
 
 ## altair / vega-lite in molab
 

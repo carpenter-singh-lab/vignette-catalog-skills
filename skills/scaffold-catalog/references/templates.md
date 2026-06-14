@@ -21,7 +21,9 @@ No `[project]` table - a catalog is not an installable package.
 ## .gitignore
 
 ```text
-# Data contents (structure tracked via .gitkeep)
+# Data contents (structure tracked via .gitkeep) - for fetched/large data only.
+# OMIT these four lines when surface = "files": small data committed to the repo,
+# where you WANT data/ tracked. See the note under this block.
 data/**
 !data/**/
 !data/**/.gitkeep
@@ -35,6 +37,10 @@ notebooks/__marimo__/**
 # Local cache
 .cache/
 ```
+
+The `data/**` block is right for `rest` / `duckdb` / `pooch` surfaces, where `data/` holds large fetched artifacts.
+For `surface = "files"` - small data committed to the repo (the whole point of a committed-data instance) - drop those four `data/**` lines so the data is tracked; git is then the integrity mechanism (see the `compose-notebook` data contract).
+The `__marimo__/session/*.json` exception is non-negotiable on every surface: it is what lets molab render committed outputs.
 
 ## CLAUDE.md
 

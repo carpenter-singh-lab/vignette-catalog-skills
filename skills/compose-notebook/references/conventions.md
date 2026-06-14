@@ -25,6 +25,9 @@ Pin exact versions for scientific deps you have validated (e.g. `polars==1.40.1`
 - top-level `@app.function` helpers are the reusable contract (pure, importable)
 - `@app.cell` blocks hold narrative plus the worked example
 
+Shared paths and constants live in the setup block of the lowest-numbered (orientation) notebook and are imported by later notebooks - do not add a separate `config` notebook or module.
+The orientation notebook *is* the config; a dedicated config notebook is a holdover from the old cookiecutter layout.
+
 **Cross-notebook imports:** add `notebooks/` to the path in the setup block, then import as plain Python.
 
 ```python
