@@ -29,7 +29,7 @@ An agent loads a skill in three levels, so put each thing at the level where it 
 
 ## Iterating with skill-creator
 
-For non-trivial changes - especially tuning a `description` for better triggering, or checking a revision actually helps - use the `skill-creator` skill: it runs with-skill vs baseline evals, a human review loop, and a description optimizer. Reach for it rather than hand-tuning when a skill's behavior or triggering is in question.
+For non-trivial changes - especially tuning a `description` for better triggering, or checking a revision actually helps - use the [`skill-creator`](https://github.com/anthropics/skills/tree/main/skills/skill-creator) skill: it runs with-skill vs baseline evals, a human review loop, and a description optimizer. Reach for it rather than hand-tuning when a skill's behavior or triggering is in question.
 
 ## Conventions
 
