@@ -28,7 +28,7 @@ This installs all three skills (they are small and work together). The three are
 | Skill | Use it to |
 |---|---|
 | [`getting-started`](skills/getting-started/SKILL.md) | Set up a freshly cloned catalog: install uv + marimo-pair, launch the first notebook in a live kernel, hand off to composition. |
-| [`compose-notebook`](skills/compose-notebook/SKILL.md) | Answer a question by composing a new notebook from a catalog's existing `@app.function` helpers, then validate it in a live kernel. |
+| [`compose-notebook`](skills/compose-notebook/SKILL.md) | Answer a question by composing a new notebook from a catalog's existing `@app.function` helpers in a live kernel, then check it with a headless gate. |
 | [`scaffold-catalog`](skills/scaffold-catalog/SKILL.md) | Stand up a brand-new catalog for a new dataset - the minimum files, conventions, and an orientation notebook. |
 
 Each skill is self-contained: a `SKILL.md` plus its own `references/` (and `scripts/` where useful).

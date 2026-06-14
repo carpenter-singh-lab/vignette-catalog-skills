@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Validate a composed or edited marimo notebook: lint, static-check, then execute
-# it through marimo export. The mechanical half of the validation rule - you still
-# have to open the notebook and look at the outputs afterward.
+# Final mechanical gate for a composed or edited marimo notebook: lint, static-check,
+# then execute it from a clean slate via marimo export. This is the CI-style check you
+# run AFTER composing and looking in a live kernel (the marimo-pair skill) - not the
+# feedback loop itself.
 #
 # Usage: bash validate-notebook.sh notebooks/<topic>.py
 set -euo pipefail
@@ -26,16 +27,19 @@ env -u PYTHONPATH uvx marimo export session --sandbox "$NB"
 
 cat <<EOF
 
-OK - mechanical checks passed.
+OK - mechanical gate passed: lint, static checks, and a clean from-scratch execution.
 
-marimo may have written __marimo__/session/*.json as a local export artifact.
-Do not commit those snapshots unless this repo intentionally tracks them for
-molab/static rendering; they can contain random UI widget ids and create noisy
-diffs across otherwise identical exports.
-
-NOW open the notebook and inspect the outputs yourself. Static checks do not catch
-empty tables, wrong sign conventions, stale endpoints, or plots that render but say nothing:
+This is the final check, not the feedback loop. By now you should have composed this
+notebook in a live kernel (the marimo-pair skill) and looked at every output - static
+checks do not catch empty tables, wrong sign conventions, stale endpoints, or plots
+that render but say nothing. If you have not yet looked at the outputs in a live kernel,
+do that before calling the notebook done:
 
   PORT=\$(python -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1])")
-  env -u PYTHONPATH uvx marimo edit --sandbox --headless --no-token --port \$PORT $NB
+  env -u PYTHONPATH uvx marimo edit --sandbox --no-token --port \$PORT $NB
+
+marimo may have written __marimo__/session/*.json as a local export artifact. Treat
+those as gitignored generated files; commit them only when this repo intentionally
+tracks snapshots for molab/static rendering (they can carry random widget ids and
+create noisy diffs).
 EOF
