@@ -21,11 +21,7 @@ Works with any agent that supports the [Agent Skills](https://agentskills.io) op
 npx skills add carpenter-singh-lab/catalog-skills --agent claude-code -y
 ```
 
-Or pull a single skill:
-
-```bash
-npx skills add carpenter-singh-lab/catalog-skills/compose-notebook --agent claude-code -y
-```
+This installs all three skills (they are small and work together). The three are also self-contained, so installing the collection and ignoring the ones you do not need is fine.
 
 ## The skills
 
