@@ -51,5 +51,5 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
 
 ## Notes
 
-- Public catalogs (jx, prx, dmx) need no auth. fgx needs `FINNGENIE_TOKEN`.
+- Public catalogs (e.g., jx, prx, dmx) need no auth, where some do, e.g., fgx needs `FINNGENIE_TOKEN`.
 - Do not improvise alternative launch commands; the `--sandbox` flag is what makes per-notebook dependencies work.

@@ -13,6 +13,7 @@ allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion
 
 Stamp out the minimum a new catalog needs.
 The templates are in [references/templates.md](references/templates.md); read it before generating files.
+The templates are a self-contained subset; the authoritative notebook/data conventions are the `compose-notebook` skill's [`references/conventions.md`](https://github.com/carpenter-singh-lab/catalog-skills/blob/main/skills/compose-notebook/references/conventions.md) - consult it (and prefer it on any conflict) when generating the orientation notebook.
 The metric that matters is time-to-second-instance: how fast a domain expert ships a catalog for a new dataset.
 
 ## Why so little

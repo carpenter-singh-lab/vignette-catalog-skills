@@ -1,5 +1,8 @@
 # Notebook conventions
 
+This is the **canonical** statement of the catalog notebook and data conventions.
+The `scaffold-catalog` skill's `templates.md` reproduces a scaffold-time subset of it; if the two diverge, this file wins.
+
 **Naming:** `nbNN_<topic>.py`, two-digit zero-padded (`nb01_retrieve_profiles.py`).
 The `nb` prefix is not decoration - Python cannot import a module whose name starts with a digit, so `nbNN_` makes the file a valid importable module.
 Composed (non-catalog) notebooks can use a plain `<topic>.py` name.

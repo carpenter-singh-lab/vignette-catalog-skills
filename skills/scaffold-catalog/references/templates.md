@@ -2,6 +2,10 @@
 
 Substitute `<CATALOG_NAME>` and fill `<DATA_SURFACE>` / `<MAP>` from the scaffold arguments.
 
+> These templates reproduce the scaffold-time subset of the notebook/data conventions so this skill stays self-contained (it can be installed without `compose-notebook`).
+> The authoritative source is the `compose-notebook` skill's [`references/conventions.md`](https://github.com/carpenter-singh-lab/catalog-skills/blob/main/skills/compose-notebook/references/conventions.md).
+> If the two ever diverge, the canonical file wins - update it there first, then sync the relevant template here.
+
 ## pyproject.toml
 
 ```toml
