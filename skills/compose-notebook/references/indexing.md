@@ -13,6 +13,18 @@ Past a handful of notebooks you cannot eyeball what it has produced, so the cata
 }
 ```
 
+Those three keys are required. An analysis that is incomplete - waiting on upstream data, or holding a provisional result - may add an optional `status` object so the gap is recorded where the numbers are, not just in prose:
+
+```json
+{
+  "description": "...", "numbers": { "...": "..." }, "files": [],
+  "status": { "state": "pending", "note": "48h only; 24h raw not yet delivered" }
+}
+```
+
+Use `state` for one of `complete` (the default - omit `status` entirely), `pending` (waiting on an input), or `provisional` (a result that will be revised), and `note` for a one-line human reason.
+The index should surface it (a badge or note on the block) so a partial result is not read as final; discovery below is a superset check, so envelopes with or without `status` are both picked up.
+
 **An index notebook** (`notebooks/index.py`) discovers every envelope, renders one block per envelope (description, numbers table, files, inline figures), and collates them into one consolidated artifact (`data/processed/index.{json,csv}`).
 
 Key properties:
