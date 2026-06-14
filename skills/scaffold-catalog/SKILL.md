@@ -25,7 +25,7 @@ Start minimal and let the catalog earn complexity only when a stable subset of t
 ## Arguments
 
 - `catalog-name` (required): short lowercase name (e.g. `cellpaint-x`). Ask if missing.
-- `data-surface` (optional): how the catalog reaches its data - `rest`, `duckdb`, `pooch`. Ask if not given.
+- `data-surface` (optional): how the catalog reaches its data - `rest`, `duckdb`, `pooch`, or `files` (small data committed to the repo). Ask if not given.
 - Ask where to create it (absolute path to the parent directory).
 
 ## Steps
@@ -59,6 +59,19 @@ Run in order; stop and report on any failure.
 8. Validate: `bash scripts/validate-notebook.sh notebooks/nb01_orientation.py` (from the catalog-skills install), or run the launch/ruff/marimo-check/export sequence by hand.
 
 9. `git add . && git commit -m "feat: initial catalog scaffold"`.
+
+## Adopting the pattern in an existing repo
+
+Often the target is not an empty directory but a repo that already exists - a planning repo or an analysis project with its own `README.md`, a `data/` tree, other tooling, maybe its own `CLAUDE.md` and `.gitignore`.
+Here the catalog governs only the `notebooks/` and analysis side; it does not take over the repo.
+The steps above still apply, with these adjustments:
+
+- Skip step 1 - no `mkdir`, no `git init`, no `cd` into a new directory. You are already in the repo.
+- Still author the contract: `catalog.toml`, `AGENTS.md`, the `pyproject.toml` ruff block, and a thin `CLAUDE.md`. If a `CLAUDE.md` already exists, thin it to a pointer at `AGENTS.md` rather than forking guidance across both.
+- Reconcile the `.gitignore`, do not overwrite it. Keep the repo's existing rules and merge in only what is missing - in particular the `!notebooks/__marimo__/session/*.json` exception, since a blanket `__marimo__/` ignore silently drops the snapshots molab renders. For `surface = "files"`, do not add the `data/**` ignore: the repo commits its small data on purpose.
+- Preserve the repo's existing planning docs and data; create only the `data/` tier directories that are missing.
+
+Then continue from step 5 (orientation notebook) as normal.
 
 ## What this skill does NOT create
 
