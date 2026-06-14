@@ -19,6 +19,11 @@ pooch.retrieve(url=URL, known_hash="sha256:abe99e71a47b...", path="data/external
 
 On first run pooch prints the hash; paste it into the constant and commit it.
 
+**When the serialization is non-deterministic, pin the extracted content, not the raw bytes.**
+Some sources re-serialize on every fetch even when the data has not changed: a Google Sheets / Docs export embeds an export timestamp, and zip and gzip carry mtimes and metadata.
+Hashing the raw download then false-alarms download-to-download (two fetches seconds apart match; one an hour later does not).
+Pin the SHA-256 of the *canonical extracted content* instead - the parsed table, or the values you actually consume - so the check fires on a real upstream change and ignores cosmetic churn.
+
 **Cache large remote artifacts** under `~/.cache/<catalog>` with an env-var override (e.g. `JX_CACHE`); check the cache first, fall back to remote.
 Commit small data (kilobytes); gitignore large data and the cache.
 
