@@ -48,12 +48,41 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    `env -u PYTHONPATH` avoids a Nix-shell websockets shim that crashes startup.
    Run it in the background so it does not block, and keep `$PORT` - the next step needs it.
 
-   Do **not** pass `--headless`. Omitting it lets marimo auto-open the browser, which is the
-   point of pairing - the user gets a live notebook to look at. Only add `--headless` on a
-   remote/SSH host with no browser, and in that case open `http://localhost:$PORT` for the user
-   yourself (`open` on macOS, `xdg-open` on Linux).
+   Whether to pass `--headless` depends on who is composing:
 
-6. **Run every cell, then confirm the kernel is populated.**
+   - **A human is pairing and a browser is available.** Omit `--headless`. marimo auto-opens
+     the browser; that frontend connection both gives the user a live notebook to look at and
+     registers the kernel session that step 6 needs. Skip to step 6.
+   - **You are an agent, or there is no browser** (a `--headless` server on a remote/SSH host,
+     a CI box, an agent-driven run). Pass `--headless` and register the session yourself in the
+     next step - nothing connects to the websocket on its own, so the server comes up with **no
+     session** and the first `execute-code.sh` call would fail with `No active sessions on the
+     server. Make sure a notebook is open in the browser.`
+
+6. **Ensure a kernel session exists** (headless launch only - skip if a browser already opened).
+   marimo creates a kernel *session* only when a frontend connects to its websocket. With no
+   browser, register one yourself:
+
+   - **A browser exists on the host but did not auto-open** (you launched `--headless` on a
+     desktop): open the URL for the user and let their browser register the session -
+     `open "http://localhost:$PORT"` on macOS, `xdg-open "http://localhost:$PORT"` on Linux.
+   - **Truly headless** (no browser at all): run the bundled stand-in, which connects to the
+     websocket the way the frontend does, waits for the kernel to report ready, and prints the
+     session id:
+
+     ```bash
+     SESSION_ID=$(<getting-started-skill-dir>/scripts/register-session.py --port $PORT)
+     echo "registered marimo session: $SESSION_ID"
+     ```
+
+   In `marimo edit` mode the session persists after the helper exits, so this one-shot call is
+   enough - keep `$SESSION_ID` and target it with `execute-code.sh --port $PORT` (or
+   `--session $SESSION_ID`). The helper takes `--token`/`MARIMO_TOKEN` for token-protected
+   servers, and `--hold` for the rare server that drops the session on disconnect (RUN mode or
+   `--session-ttl`); plain `marimo edit` needs neither. Confirm with
+   `curl -s http://127.0.0.1:$PORT/api/sessions` that a session is now listed.
+
+7. **Run every cell, then confirm the kernel is populated.**
    marimo only auto-runs cells when a browser frontend connects, so a freshly launched kernel
    can sit with all cells stale and every notebook variable undefined. Do not rely on the
    browser - run the cells explicitly via the marimo-pair scripts you installed in step 3
@@ -69,12 +98,14 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    Then spot-check that a key variable resolved (e.g. print the shape of the notebook's main
    table) before handing off. An empty, unexecuted kernel is the most common "it didn't work".
 
-7. **Hand off.**
-   Tell the user the kernel is running, the notebook is open in their browser, and that they can
-   now ask a question - the `compose-notebook` skill takes it from here.
+8. **Hand off.**
+   Tell the user the kernel is running on `$PORT` (and, if you registered one, that a session is
+   live - the notebook is open in their browser when a browser was used) and that they can now
+   ask a question - the `compose-notebook` skill takes it from here.
 
 ## Notes
 
 - Public catalogs (e.g., jx, prx, dmx) need no auth, where some do, e.g., fgx needs `FINNGENIE_TOKEN`.
 - Do not improvise alternative launch commands; the `--sandbox` flag is what makes per-notebook dependencies work.
+- Do not improvise the headless session bootstrap either - the `scripts/register-session.py` stand-in is the supported way to register a kernel session without a browser. It exists so each agent does not re-derive a websocket client from scratch.
 - If the repo gitignores its skill stores (tracks only `skills-lock.json`) and the catalog skills look missing or stale, `npx skills update` reconstitutes them from the lock. This is a refresh once the skills are already present - it is **not** the clone-time bootstrap. A cloner who has *no* catalog skills on disk cannot reach this skill to run that step; the post-clone restore therefore lives in the repo's tracked `AGENTS.md` / `README.md`, not here, since a skill cannot bootstrap its own install.
