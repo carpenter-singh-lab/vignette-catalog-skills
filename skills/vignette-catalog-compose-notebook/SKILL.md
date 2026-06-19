@@ -28,7 +28,7 @@ The headless `validate-notebook.sh` is the final gate, not the feedback loop.
 1. **Ensure a live kernel.**
    You compose against a running marimo kernel driven by the `marimo-pair` skill.
    If none is running - no `marimo-pair` session, no port you can post cells to - run `vignette-catalog-setup` first: it installs `marimo-pair`, launches the catalog's first notebook under `--sandbox`, runs its cells, and hands back a live kernel on a known port.
-   Keep that port; every "run a cell" below targets it.
+   Keep that port - but know it is the *first notebook's* sandbox, holding only that notebook's deps. A parameter swap (step 3) runs there directly; a composed notebook that declares its own dependencies needs its own kernel instead (step 3 explains why and how).
 
 2. **Orient from the manifest.**
    Read `catalog.toml` at the repo root for the vignette table (each notebook, its reusable `@app.function`s, and what they do), the data surface, and any auth.
@@ -40,6 +40,12 @@ The headless `validate-notebook.sh` is the final gate, not the feedback loop.
    - Parameter swap: the question is an existing vignette with different inputs -> change the inputs in the live notebook and re-run, cheapest.
    - Compose: the question needs helpers from two or more notebooks -> add a new `notebooks/<topic>.py` that imports them.
      Import helpers as plain Python; see [references/conventions.md](references/conventions.md) for the setup-block and `sys.path` recipe.
+
+   **A composed notebook usually needs its own kernel - do not assume the handed-off one will do.**
+   The kernel `vignette-catalog-setup` gives you runs the *first* notebook inside a `--sandbox` provisioned from *that* notebook's PEP 723 deps.
+   The moment your composed `.py` declares a dependency the first notebook lacks - a plotting or dataframe library, say - importing it in the handed-off kernel fails with `ModuleNotFoundError`, because the sandbox was never told about it and `pip install` into a uv sandbox is not the path.
+   So when your notebook adds deps, do not fight the old kernel: launch a fresh one *on the composed notebook* with the same recipe `vignette-catalog-setup` step 5 uses (a new port, `env -u PYTHONPATH uvx marimo edit --sandbox --no-token --headless --port <new> notebooks/<topic>.py`, then register a session and run the cells), and target that new port for every "run a cell" in step 4.
+   Reuse the handed-off kernel only for a parameter swap or a composed notebook that introduces no new dependencies.
 
    Either way the `.py` on disk is the source of truth: author cells there, then run them in the kernel to see the result.
    Scratch exploration can happen live, but anything the finished notebook depends on must land in the `.py`, not only in kernel state - a fresh kernel has to reproduce it.

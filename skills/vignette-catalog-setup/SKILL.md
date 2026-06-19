@@ -126,6 +126,10 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    Tell the user the kernel is running on `$PORT` (and, if you registered one, that a session is
    live - the notebook is open in their browser when a browser was used) and that they can now
    ask a question - the `vignette-catalog-compose-notebook` skill takes it from here.
+   This kernel runs the *first* notebook in its own `--sandbox`, so it holds only that notebook's
+   PEP 723 deps. Hand off the port, but do not promise it serves every notebook: a composed
+   notebook that introduces new dependencies needs its own `--sandbox` kernel (a relaunch of
+   step 5 on that notebook), which `vignette-catalog-compose-notebook` handles.
 
 ## Notes
 
