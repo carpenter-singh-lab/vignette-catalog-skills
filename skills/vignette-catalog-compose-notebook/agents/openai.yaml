@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vignette Catalog Compose Notebook"
+  short_description: "Compose analyses from catalog helpers"
+  default_prompt: "Use $vignette-catalog-compose-notebook to answer this data question by reusing catalog helpers in a live marimo kernel."

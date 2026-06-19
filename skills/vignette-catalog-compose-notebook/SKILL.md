@@ -1,17 +1,17 @@
 ---
-name: compose-notebook
+name: vignette-catalog-compose-notebook
 description: >-
-  Compose a new marimo notebook that answers a data question by reusing the
-  @app.function helpers already in a vignette catalog (jx, fgx, prx, dmx, or any
-  catalog on the catalog-skills pattern), then run and refine it in a live kernel.
-  Use whenever someone asks for an analysis, figure, notebook, or vignette
-  against a catalog's dataset - even if they don't say "marimo" or "reuse the
-  catalog" - instead of writing a query pipeline from scratch or duplicating
-  helpers that already exist.
+  Compose a marimo notebook that answers a data question by importing reusable
+  @app.function helpers from an existing vignette catalog, running each step in
+  a live kernel, and validating the final notebook. Use when a user asks for an
+  analysis, figure, vignette, or notebook against a catalog dataset, even if
+  they do not mention marimo or helper reuse. Do not use for generic notebook
+  authoring outside a vignette catalog; run vignette-catalog-setup first if no
+  live kernel exists.
 allowed-tools: Bash, Read, Write, Glob, Grep
 ---
 
-# Compose a notebook from a catalog
+# Compose a notebook from a vignette catalog
 
 Answer a question by composing existing catalog helpers in a live marimo kernel, not by writing a pipeline from scratch and checking it headless.
 The live kernel - driven by the `marimo-pair` skill - is where you compose and look; the `.py` on disk is the durable artifact you commit.
@@ -27,7 +27,7 @@ The headless `validate-notebook.sh` is the final gate, not the feedback loop.
 
 1. **Ensure a live kernel.**
    You compose against a running marimo kernel driven by the `marimo-pair` skill.
-   If none is running - no `marimo-pair` session, no port you can post cells to - run `getting-started` first: it installs `marimo-pair`, launches the catalog's first notebook under `--sandbox`, runs its cells, and hands back a live kernel on a known port.
+   If none is running - no `marimo-pair` session, no port you can post cells to - run `vignette-catalog-setup` first: it installs `marimo-pair`, launches the catalog's first notebook under `--sandbox`, runs its cells, and hands back a live kernel on a known port.
    Keep that port; every "run a cell" below targets it.
 
 2. **Orient from the manifest.**
@@ -56,7 +56,7 @@ The headless `validate-notebook.sh` is the final gate, not the feedback loop.
    Use the `scripts/validate-notebook.sh` bundled with this skill, passing the notebook path:
 
    ```bash
-   bash <compose-notebook-skill-dir>/scripts/validate-notebook.sh notebooks/<topic>.py
+   bash <vignette-catalog-compose-notebook-skill-dir>/scripts/validate-notebook.sh notebooks/<topic>.py
    ```
 
    It runs `marimo check --fix`, runs `ruff` on that notebook, and - last, after the final source edit - executes the notebook through marimo export.

@@ -1,6 +1,7 @@
 # Gotchas
 
-Harvested from the live catalogs (jx, fgx, prx, dmx). These are the traps that pass static checks but break the result or the molab preview.
+Harvested from repeated vignette-catalog runs.
+These are the traps that pass static checks but break the result or the molab preview.
 
 ## marimo session snapshots
 
@@ -37,5 +38,5 @@ They can also include interactive UI widget metadata, including random ids, that
 ## data surfaces
 
 - Query an API's OpenAPI spec before guessing parameter names; semantic endpoint names do not imply response shape or granularity.
-- Pin SHA-256 on pooch fetches - Figshare and CDNs 302-redirect, and the hash is what guarantees integrity across a swap.
-- Check sign conventions on similarity/distance matrices against the actual values, not the filename or docstring (a jx cosine matrix is labeled like a distance but holds similarities in [-1, 1]).
+- Pin SHA-256 on pooch fetches - hosted files and CDNs can redirect or change silently, and the hash is what guarantees integrity across a swap.
+- Check sign conventions on similarity/distance matrices against the actual values, not the filename or docstring.

@@ -1,19 +1,21 @@
 ---
-name: scaffold-catalog
+name: vignette-catalog-scaffold
 description: >-
-  Stand up a brand-new vignette catalog for a new dataset, following the
-  catalog-skills pattern. Use when someone wants to start a catalog, create a
-  new instance like jx/fgx/prx/dmx for a different dataset, or "scaffold a
-  catalog" - produces the minimum runnable files, conventions, manifest, and an
-  orientation notebook.
+  Create or adopt a repository as a new vignette catalog for a dataset,
+  following the vignette-catalog pattern. Use when someone asks to start,
+  scaffold, or build a new catalog, or make an existing repo follow the
+  vignette-catalog pattern. Produces the minimum runnable files, conventions,
+  manifest, and orientation notebook. Do not use for first-run setup in an
+  already scaffolded catalog; use vignette-catalog-setup for that.
 allowed-tools: Bash, Read, Write, Glob, Grep, AskUserQuestion
 ---
 
-# Scaffold a new catalog
+# Scaffold a vignette catalog
 
 Stamp out the minimum a new catalog needs.
 The templates are in [references/templates.md](references/templates.md); read it before generating files.
-The templates are a self-contained subset; the authoritative notebook/data conventions are the `compose-notebook` skill's [`references/conventions.md`](https://github.com/carpenter-singh-lab/catalog-skills/blob/main/skills/compose-notebook/references/conventions.md) - consult it (and prefer it on any conflict) when generating the orientation notebook.
+The templates are a self-contained subset of the notebook/data conventions, so this skill can run without a sibling skill installed.
+When maintaining this collection, keep them aligned with the `vignette-catalog-compose-notebook` conventions.
 The metric that matters is time-to-second-instance: how fast a domain expert ships a catalog for a new dataset.
 
 ## Why so little
@@ -47,16 +49,18 @@ Run in order; stop and report on any failure.
 4. Install the catalog skills so the agent can compose against the new catalog:
 
    ```bash
-   npx skills add carpenter-singh-lab/catalog-skills --agent claude-code -y
+   npx skills add carpenter-singh-lab/vignette-catalog-skills -y
    ```
+
+   The skills CLI auto-detects common agents; pass `--agent <agent>` only when the project needs an explicit target.
 
 5. Write an orientation notebook `notebooks/nb01_orientation.py`: a PEP 723 header, a `with app.setup:` block, one `@app.function` that hits the data surface, and a `## To extend` cell. Keep it minimal but runnable.
 
-6. Write a short `README.md`: what the catalog is, the one-row notebook list, getting-started, links to sibling catalogs and to the catalog-skills repo. The getting-started section must include the post-clone skill restore (`npx skills update`), since the skill stores are gitignored and a cloner has only `skills-lock.json`.
+6. Write a short `README.md`: what the catalog is, the one-row notebook list, setup instructions, links to sibling catalogs and to the vignette-catalog-skills repo. The setup section must include the post-clone skill restore (`npx skills update`), since the skill stores are gitignored and a cloner has only `skills-lock.json`.
 
 7. Fill `catalog.toml` with the orientation notebook's helper(s) and the data surface / auth.
 
-8. Validate with the `validate-notebook.sh` bundled in the installed `compose-notebook` skill, passing `notebooks/nb01_orientation.py`, or run the launch/ruff/marimo-check/export sequence by hand.
+8. Validate with the `validate-notebook.sh` bundled in the installed `vignette-catalog-compose-notebook` skill, passing `notebooks/nb01_orientation.py`, or run the launch/ruff/marimo-check/export sequence by hand.
 
 9. `git add . && git commit -m "feat: initial catalog scaffold"`.
 
@@ -76,4 +80,4 @@ Then continue from step 5 (orientation notebook) as normal.
 ## What this skill does NOT create
 
 No `src/` package, no Snakemake/redun pipeline, no pixi environment, no Justfile, no S3 sync.
-Those production pieces are added later, only if a stable subset earns them - see the catalog-skills README, "Graduating to a production pipeline".
+Those production pieces are added later, only if a stable subset earns them - see the vignette-catalog-skills README, "Graduating to a production pipeline".

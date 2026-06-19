@@ -1,15 +1,17 @@
 ---
-name: getting-started
+name: vignette-catalog-setup
 description: >-
-  First-run setup for a vignette catalog (jx, fgx, prx, dmx, or any catalog
-  built on the catalog-skills pattern). Use when someone has just cloned a
-  catalog repo and asks to "get started", "set up", or "help me run this", or
-  when a marimo catalog needs its prerequisites installed and a first notebook
-  launched in a live kernel.
+  Set up an existing vignette catalog after clone by reading catalog.toml,
+  checking uv and auth, installing marimo-pair, launching the first marimo
+  notebook under --sandbox, registering a live kernel, and handing off to
+  vignette-catalog-compose-notebook. Use when someone is in a catalog repo and
+  asks to get started, set up, run the catalog, launch the first notebook, or
+  prepare a live kernel. Do not use to create a new catalog; use
+  vignette-catalog-scaffold for that.
 allowed-tools: Bash, Read
 ---
 
-# Getting started in a catalog
+# Set up a vignette catalog
 
 Bring a freshly cloned catalog to a running marimo kernel, then hand off to composition.
 
@@ -29,11 +31,13 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
 3. **Install the marimo-pair skill** for the user's agent (it is how you drive a live kernel):
 
    ```bash
-   npx skills add marimo-team/marimo-pair --agent claude-code -y
+   npx skills add marimo-team/marimo-pair -y
    ```
 
+   The skills CLI auto-detects common agents; pass `--agent <agent>` only when the project needs an explicit target.
+
 4. **Check auth if the manifest declares it.**
-   If `auth` names an env var (e.g. `FINNGENIE_TOKEN`), confirm a `.env` exists and the var is set.
+   If `auth` names an env var, confirm a `.env` exists and the var is set.
    If not, stop and tell the user how to get the token (point to the catalog's README); do not proceed.
 
 5. **Launch the first notebook** in a sandbox, in the background, and remember the port:
@@ -71,7 +75,7 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
      session id:
 
      ```bash
-     SESSION_ID=$(<getting-started-skill-dir>/scripts/register-session.py --port $PORT)
+     SESSION_ID=$(<vignette-catalog-setup-skill-dir>/scripts/register-session.py --port $PORT)
      echo "registered marimo session: $SESSION_ID"
      ```
 
@@ -101,11 +105,11 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
 8. **Hand off.**
    Tell the user the kernel is running on `$PORT` (and, if you registered one, that a session is
    live - the notebook is open in their browser when a browser was used) and that they can now
-   ask a question - the `compose-notebook` skill takes it from here.
+   ask a question - the `vignette-catalog-compose-notebook` skill takes it from here.
 
 ## Notes
 
-- Public catalogs (e.g., jx, prx, dmx) need no auth, where some do, e.g., fgx needs `FINNGENIE_TOKEN`.
+- Public catalogs often need no auth; private or authenticated catalogs declare their required env var in `catalog.toml`.
 - Do not improvise alternative launch commands; the `--sandbox` flag is what makes per-notebook dependencies work.
 - Do not improvise the headless session bootstrap either - the `scripts/register-session.py` stand-in is the supported way to register a kernel session without a browser. It exists so each agent does not re-derive a websocket client from scratch.
 - If the repo gitignores its skill stores (tracks only `skills-lock.json`) and the catalog skills look missing or stale, `npx skills update` reconstitutes them from the lock. This is a refresh once the skills are already present - it is **not** the clone-time bootstrap. A cloner who has *no* catalog skills on disk cannot reach this skill to run that step; the post-clone restore therefore lives in the repo's tracked `AGENTS.md` / `README.md`, not here, since a skill cannot bootstrap its own install.

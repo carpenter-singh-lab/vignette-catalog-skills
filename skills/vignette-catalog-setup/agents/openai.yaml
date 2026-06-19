@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vignette Catalog Setup"
+  short_description: "Launch an existing catalog in a live kernel"
+  default_prompt: "Use $vignette-catalog-setup to restore the catalog skills, check prerequisites, and launch the first notebook in a live marimo kernel."

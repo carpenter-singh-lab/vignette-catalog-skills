@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vignette Catalog Scaffold"
+  short_description: "Create a new vignette catalog"
+  default_prompt: "Use $vignette-catalog-scaffold to create a new vignette catalog with the minimum runnable files, manifest, and orientation notebook."

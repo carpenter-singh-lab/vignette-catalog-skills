@@ -2,9 +2,8 @@
 
 Substitute `<CATALOG_NAME>` and fill `<DATA_SURFACE>` / `<MAP>` from the scaffold arguments.
 
-> These templates reproduce the scaffold-time subset of the notebook/data conventions so this skill stays self-contained (it can be installed without `compose-notebook`).
-> The authoritative source is the `compose-notebook` skill's [`references/conventions.md`](https://github.com/carpenter-singh-lab/catalog-skills/blob/main/skills/compose-notebook/references/conventions.md).
-> If the two ever diverge, the canonical file wins - update it there first, then sync the relevant template here.
+> These templates reproduce the scaffold-time subset of the notebook/data conventions so this skill stays self-contained.
+> When maintaining this collection, sync them with `skills/vignette-catalog-compose-notebook/references/conventions.md`.
 
 ## pyproject.toml
 
@@ -31,6 +30,13 @@ data/**
 # marimo caches and exported session snapshots
 notebooks/__marimo__/**
 
+# Python and tool caches
+.venv/
+uv.lock
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
 # Installed skills: recorded in the tracked skills-lock.json, NOT vendored.
 # `npx skills add` writes content into these stores; ignoring them keeps a clone
 # from committing third-party skill copies that go stale. A fresh clone restores
@@ -46,7 +52,7 @@ notebooks/__marimo__/**
 
 `skills-lock.json` itself is tracked - it is the record `npx skills update` restores from. Do not ignore it.
 The `data/**` block is right for `rest` / `duckdb` / `pooch` surfaces, where `data/` holds large fetched artifacts.
-For `surface = "files"` - small data committed to the repo (the whole point of a committed-data instance) - drop those four `data/**` lines so the data is tracked; git is then the integrity mechanism (see the `compose-notebook` data contract).
+For `surface = "files"` - small data committed to the repo (the whole point of a committed-data instance) - drop those four `data/**` lines so the data is tracked; git is then the integrity mechanism (see the `vignette-catalog-compose-notebook` data contract).
 Do not track `notebooks/__marimo__/session/*.json` by default. Those files are useful local export artifacts, but they can include random marimo UI widget ids and produce noisy diffs. If a catalog deliberately wants molab/static previews from committed snapshots, add an explicit `!notebooks/__marimo__/session/*.json` exception and warn the user about the churn tradeoff.
 
 ## CLAUDE.md
@@ -65,7 +71,7 @@ This file exists only so Claude Code discovers the contract; do not fork guidanc
 
 Project-specific guidance for agents working in this catalog.
 `README.md` is the human entry point.
-This catalog uses the shared catalog-skills (`getting-started`, `compose-notebook`); its specifics live in `catalog.toml`.
+This catalog uses the shared vignette-catalog-skills (`vignette-catalog-setup`, `vignette-catalog-compose-notebook`); its specifics live in `catalog.toml`.
 
 ## Skills (restore after clone)
 
@@ -88,7 +94,7 @@ Do not improvise alternative launch commands.
 
 ## Validation rule
 
-After composing or editing any notebook, run the `validate-notebook.sh` bundled with the installed `compose-notebook` skill, passing the notebook path, then open it and look at the outputs.
+After composing or editing any notebook, run the `validate-notebook.sh` bundled with the installed `vignette-catalog-compose-notebook` skill, passing the notebook path, then open it and look at the outputs.
 Static checks do not catch wrong outputs, empty tables, stale endpoints, broken plots, or sign-convention mistakes.
 
 ## Architecture
@@ -128,4 +134,4 @@ helpers  = []                # fill once the orientation notebook defines helper
 does     = "Orientation: what this dataset is and how to reach it"
 ```
 
-See the `compose-notebook` skill's `references/manifest.md` for the full manifest schema.
+See the `vignette-catalog-compose-notebook` skill's `references/manifest.md` for the full manifest schema.

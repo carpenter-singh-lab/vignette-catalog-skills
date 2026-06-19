@@ -1,4 +1,4 @@
-# AGENTS.md - catalog-skills
+# AGENTS.md - vignette-catalog-skills
 
 Guidance for agents working **on this repository** (authoring and editing the skills themselves).
 To work in a catalog that has these skills installed, read the installed skill, not this file.
@@ -8,7 +8,7 @@ To work in a catalog that has these skills installed, read the installed skill, 
 An installable collection of agent skills for the vignette-catalog method.
 `README.md` is the human entry point and conceptual orientation.
 Each skill under `skills/<name>/` is self-contained: a `SKILL.md` (frontmatter + body) plus its own `references/` and, where useful, `scripts/`.
-Skills are distributed via the [Agent Skills](https://agentskills.io) standard (`npx skills add carpenter-singh-lab/catalog-skills`).
+Skills are distributed via the [Agent Skills](https://agentskills.io) standard (`npx skills add carpenter-singh-lab/vignette-catalog-skills`).
 
 ## Where things go in a skill
 
@@ -36,3 +36,6 @@ The floor that always applies, even when skill-creator is not at hand: prefer im
 Prose in `.md` files uses semantic line breaks (one sentence per line).
 ASCII-only glyphs - hyphens, no em/en-dashes or arrows.
 Conventional Commits (`feat:`, `fix:`, `docs:`, ...).
+
+Skill names in this collection use the shared `vignette-catalog-*` namespace.
+Keep the folder name and frontmatter `name` identical, and put the precise trigger and boundary in `description`.
