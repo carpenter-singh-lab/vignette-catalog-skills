@@ -22,8 +22,12 @@ uvx ruff format "$NB"
 
 # Executing the notebook here surfaces runtime failures that static checks miss.
 # env -u PYTHONPATH avoids the Nix websockets shim.
+# --force-overwrite: without it, marimo SKIPS execution when a session snapshot is already
+#   up-to-date and still exits 0 - so the gate would print "OK" without re-running a thing.
+#   We always want a real cold execution here, so force it.
+# --no-continue-on-error: this gate checks one notebook; a failing cell must fail the gate.
 echo "==> execute notebook via marimo export (failure here is a real bug in the notebook)"
-env -u PYTHONPATH uvx marimo export session --sandbox "$NB"
+env -u PYTHONPATH uvx marimo export session --sandbox --force-overwrite --no-continue-on-error "$NB"
 
 cat <<EOF
 
