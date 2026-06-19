@@ -107,6 +107,14 @@ Static checks do not catch wrong outputs, empty tables, stale endpoints, broken 
 
 Semantic line breaks in markdown. ASCII-only. Conventional Commits. `ruff line-length = 120` is Python only.
 
+## Canonical contract (read before editing)
+
+The rules above are the headline subset. The full, canonical contract lives in the installed
+`vignette-catalog-compose-notebook` skill's `references/` - notebook conventions, the data
+contract, indexing, the `catalog.toml` schema, and marimo gotchas (that skill's SKILL.md indexes
+them). Read the relevant one before authoring or editing a notebook or its outputs; do not wait
+for the skill to be invoked. Restore with `npx skills update` if the skill store is empty.
+
 ## When the question fits the catalog
 
 <MAP: question type -> notebook, one line each. Mirror the [[vignette]] table in catalog.toml.>
