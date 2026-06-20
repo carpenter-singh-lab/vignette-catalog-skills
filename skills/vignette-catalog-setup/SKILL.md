@@ -131,6 +131,24 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    its own `--sandbox` kernel (a relaunch of step 5 on that notebook), which
    `vignette-catalog-compose-notebook` handles.
 
+## Stopping a kernel
+
+When you need to tear down a kernel you launched (end of an agent run, or before relaunching on
+another notebook), stop the one you started - **by its `$PORT`, never with a broad `pkill`**.
+`uvx marimo edit --sandbox` is a 4-process tree (`uvx` -> python -> `uv run` -> python), so killing
+the recorded `$MARIMO_PID` alone orphans the `uv run` grandchild that actually serves the socket;
+and on a shared host `pkill -f marimo` kills other users' kernels and your own shell wrapper. Match
+the listener on the port and kill its whole process group:
+
+```bash
+PGID=$(ps -o pgid= -p "$(lsof -ti tcp:$PORT -s tcp:LISTEN | head -1)" 2>/dev/null | tr -d ' ')
+[ -n "$PGID" ] && kill -TERM -"$PGID"
+curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && echo "still up - retry with kill -9 -$PGID" || echo "kernel on $PORT stopped"
+```
+
+This is why step 5 records `$MARIMO_PID` and `$PORT`: keep them for the run so teardown targets
+exactly your kernel and nothing else.
+
 ## Notes
 
 - Public catalogs often need no auth; private or authenticated catalogs declare their required env var in `catalog.toml`.

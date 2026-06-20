@@ -35,7 +35,19 @@ Start minimal and let the catalog earn complexity only when a stable subset of t
 
 Run in order; stop and report on any failure.
 
-1. `mkdir <parent>/<catalog-name> && cd` into it, `git init`.
+1. Create the directory, but stop if the name is taken.
+   A bare `mkdir` succeeds on an existing empty dir and `git init` will happily re-init over a populated one, so an accidental collision silently adopts or clobbers a catalog from a prior run.
+   Guard against it:
+
+   ```bash
+   target="<parent>/<catalog-name>"
+   if [ -e "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ]; then
+       echo "error: $target already exists and is non-empty - pick another name or adopt it (see 'Adopting the pattern')" >&2
+       exit 1
+   fi
+   mkdir -p "$target" && cd "$target"
+   git init
+   ```
 
 2. Create the tree:
 
