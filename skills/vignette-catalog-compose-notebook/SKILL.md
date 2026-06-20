@@ -84,8 +84,13 @@ Scratch exploration can happen live, but anything the finished notebook depends 
    See [references/viewing-outputs.md](references/viewing-outputs.md).
    Keep going until every cell runs clean and says something true.
 
-**Headless / no live kernel.** A non-interactive agent (CI, no browser, no drivable `marimo-pair` port) cannot run the cell-by-cell loop above.
-Then this is the supported substitute: author the cells in the `.py` (still the source of truth), run the headless gate in step 5 to execute the whole notebook from a clean slate, and look at the real outputs through an export rather than a live kernel - the tier-3 path in [references/viewing-outputs.md](references/viewing-outputs.md) (export PNGs, or read the session JSON, mindful that a `mo.ui.altair_chart`'s data is a base64 Arrow blob, not plain rows).
+**Headless does not mean no kernel - get a live one first.** No browser is *not* a reason to skip the live kernel.
+A headless host (remote, SSH, agent-driven) still runs the full cell-by-cell loop: `vignette-catalog-setup` launches the kernel `--headless` and registers a session with its bundled `scripts/register-session.py` - a websocket stand-in that creates the session `execute-code` attaches to, no browser and no `agent-browser`/Chrome needed.
+If no kernel is running, run that setup before composing; do not default to the export-only path below just because there is no display.
+The live kernel is not a nicety here: it holds your fetched data in memory, so an expensive pull (a whole drug-response screen, a big matrix) happens once and every later probe slices it instantly.
+Compose against the headless export instead and you re-fetch the same data on every probe - the single biggest avoidable cost on a REST surface like this catalog.
+
+**Genuinely no port (locked-down CI, no `claude`, no reachable kernel).** Only when you truly cannot stand up or reach a kernel, fall back to this substitute: author the cells in the `.py` (still the source of truth), run the headless gate in step 5 to execute the whole notebook from a clean slate, and look at the real outputs through an export rather than a live kernel - the tier-3 path in [references/viewing-outputs.md](references/viewing-outputs.md) (export PNGs, or read the session JSON, mindful that a `mo.ui.altair_chart`'s data is a base64 Arrow blob, not plain rows).
 The rule that you must look at actual outputs, not just a green check, is unchanged; only the surface you look at differs.
 Do not treat "the cell ran without error" as having looked.
 
