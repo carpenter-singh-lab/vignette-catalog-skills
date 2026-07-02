@@ -24,7 +24,7 @@ Target the chart by **cell id or index**, and screenshot a cell that is actually
 `ctx.find_cell_defining_object(obj)` is the other way in, but it is a footgun: the scratch exec's scope does not carry notebook variables (so pass `ctx.globals["chart"]`, not a bare `chart`), it returns `None` for an unregistered object, and `screenshot(None, ...)` then silently captures the last cell instead of erroring. If you use it, assert the hit: `cid = ctx.find_cell_defining_object(ctx.globals["chart"]); assert cid is not None`.
 
 Keep the `await ctx.screenshot(...)` inside the `async with`; it needs the live session.
-Setup, once per environment: `ctx.packages.add("playwright")` (do **not** `await` it - it returns `None`) then `python -m playwright install chromium`. The first screenshot raises a `ScreenshotError` naming this exact fix if you skip it.
+Setup, once per environment: `ctx.packages.add("playwright")` (do **not** `await` it - it returns `None`) then `python3 -m playwright install chromium`. The first screenshot raises a `ScreenshotError` naming this exact fix if you skip it.
 Heads-up: `packages.add("playwright")` writes `playwright` into the notebook's PEP 723 deps on disk. It is a compose-time capture tool, not a runtime dep - delete that line before the final gate.
 Pass `as_data_url=True` for a `data:image/png` string instead of writing a file.
 

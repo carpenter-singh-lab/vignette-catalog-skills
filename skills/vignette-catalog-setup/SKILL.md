@@ -46,12 +46,15 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    - **Direct token** (`env_var`, say `CATALOG_TOKEN`): passes if `$CATALOG_TOKEN` is non-empty
      in your shell, **or** if a `.env` at the repo root contains the key - notebooks commonly
      load `.env` in-process (dotenv), so a working token may never appear in the shell
-     environment.
+     environment. A value that lives only in a direnv `.envrc` is invisible to a
+     non-interactive shell - probe it under `direnv exec .` instead.
    - **Indirect reference** (`indirect_env_var`, say `CATALOG_OP_REF`): the named var holds a
      secret-manager reference the catalog resolves at runtime (e.g. an `op://` item read via the
      1Password CLI). Resolve the var's *value* - the reference string, which may itself arrive
      via a direnv `.envrc` or shell profile - once end-to-end:
-     `op read "$CATALOG_OP_REF" >/dev/null && echo ok`. Two traps here: sandboxed agent shells
+     `op read "$CATALOG_OP_REF" >/dev/null && echo ok`. If the var comes from a direnv
+     `.envrc`, run the probe as `direnv exec . op read ...` (non-interactive shells never load
+     direnv) and obtain the value to thread in step 5 the same way. Two traps here: sandboxed agent shells
      block the IPC secret-manager CLIs use to reach their desktop app, so the probe fails
      instantly - rerun it unsandboxed; and resolution may pop an interactive unlock/biometric
      prompt on the user's screen - warn the user one may appear and allow well over 30 seconds
@@ -70,8 +73,10 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
      (`CATALOG_OP_REF="$CATALOG_OP_REF"`) - the notebook resolves it in-process, and the
      reference string is not the secret, so inlining it is safe. Do NOT resolve the secret
      yourself and thread the token.
-   - **Direct token in the shell**: `export` it before launching and let the launch inherit it.
-     Never inline the raw secret on the command line - it leaks into logs and the process table.
+   - **Direct token in the shell**: `export` it and launch **in the same shell invocation** -
+     env does not persist across an agent's separate shell calls, so an export in one call is
+     silently gone by the next. Never inline the raw secret on the command line - it leaks into
+     logs and the process table.
    - **Token only in `.env`**: thread nothing; the notebook loads `.env` from the repo root at
      runtime.
 
