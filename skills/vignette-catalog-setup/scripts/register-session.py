@@ -19,7 +19,7 @@ Usage:
 
     # capture the session id a single notebook server just exposed
     SID=$(register-session.py --port "$PORT")
-    bash <marimo-pair>/scripts/execute-code.sh --port "$PORT" -c "print('ok')"
+    bash <marimo-pair>/scripts/execute-code.sh --url "http://127.0.0.1:$PORT" -c "print('ok')"
 
 Auth: pass --token, or set MARIMO_TOKEN, for a server started with a token.
 A server launched with --no-token (what `vignette-catalog-setup` does) needs neither.

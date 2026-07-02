@@ -38,24 +38,42 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    Skip the add if marimo-pair is already installed - check the agent's skill stores first (e.g. `~/.claude/skills/marimo-pair` or the repo's `.claude/skills/`).
 
 4. **Check auth if the manifest declares it.**
-   If `[auth]` names an env var, confirm the token is *obtainable* - not merely that some variable
-   is set. The var may arrive via a `.env`, a direnv `.envrc`, or the shell profile; and the
-   catalog may accept an indirect alternative (`[auth].indirect_env_var`): a variable holding a
-   secret-manager reference the catalog resolves at runtime (e.g. an `op://` item read via the
-   1Password CLI). Probe whichever form is present:
+   Auth is required when `[auth].env_var` **or** `[auth].indirect_env_var` is non-empty; if both
+   are empty (or there is no `[auth]`), the catalog is public - skip this step. Confirm the token
+   is *obtainable*, not merely that some variable is set. Passing **either** probe satisfies
+   auth: probe `env_var` first, and fall back to `indirect_env_var`.
 
-   - **Direct token**: confirm the var is non-empty.
-   - **Indirect reference**: resolve it once end-to-end (e.g. `op read "$REF" >/dev/null && echo ok`).
-     Two traps here: sandboxed agent shells block the IPC secret-manager CLIs use to reach their
-     desktop app, so the probe fails instantly - rerun it unsandboxed; and resolution may pop an
-     interactive unlock/biometric prompt on the user's screen - warn the user one may appear and
-     allow well over 30 seconds before calling it failed.
+   - **Direct token** (`env_var`, say `CATALOG_TOKEN`): passes if `$CATALOG_TOKEN` is non-empty
+     in your shell, **or** if a `.env` at the repo root contains the key - notebooks commonly
+     load `.env` in-process (dotenv), so a working token may never appear in the shell
+     environment.
+   - **Indirect reference** (`indirect_env_var`, say `CATALOG_OP_REF`): the named var holds a
+     secret-manager reference the catalog resolves at runtime (e.g. an `op://` item read via the
+     1Password CLI). Resolve the var's *value* - the reference string, which may itself arrive
+     via a direnv `.envrc` or shell profile - once end-to-end:
+     `op read "$CATALOG_OP_REF" >/dev/null && echo ok`. Two traps here: sandboxed agent shells
+     block the IPC secret-manager CLIs use to reach their desktop app, so the probe fails
+     instantly - rerun it unsandboxed; and resolution may pop an interactive unlock/biometric
+     prompt on the user's screen - warn the user one may appear and allow well over 30 seconds
+     before calling it failed.
 
-   If the probe fails, stop: tell the user how to unblock (unlock the secret manager, or where to
+   If no probe passes, stop: tell the user how to unblock (unlock the secret manager, or where to
    get a token - point to the catalog's README) and hand them the exact probe command so they can
    verify it themselves before you retry. Do not proceed on an unproven token.
 
-5. **Launch the first notebook** in a sandbox, in the background, and remember the port:
+5. **Launch the first notebook** in a sandbox, in the background, and remember the port.
+   If step 4 required auth, the launch must carry the var you probed - direnv only hooks
+   interactive shells, so a var exported by `.envrc` is invisible to the non-interactive shell an
+   agent launches from; do not assume inheritance. Which var, and how:
+
+   - **Indirect auth**: thread the *reference* var into the `env` prefix
+     (`CATALOG_OP_REF="$CATALOG_OP_REF"`) - the notebook resolves it in-process, and the
+     reference string is not the secret, so inlining it is safe. Do NOT resolve the secret
+     yourself and thread the token.
+   - **Direct token in the shell**: `export` it before launching and let the launch inherit it.
+     Never inline the raw secret on the command line - it leaks into logs and the process table.
+   - **Token only in `.env`**: thread nothing; the notebook loads `.env` from the repo root at
+     runtime.
 
    ```bash
    PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1])")
@@ -63,6 +81,7 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    echo "marimo port: $PORT"
    echo "marimo log: $MARIMO_LOG"
    ulimit -n "$(ulimit -Hn)" 2>/dev/null || true   # see note below: avoids os error 24 on shared Linux hosts
+   # auth catalogs: extend the env prefix per above, e.g. env -u PYTHONPATH CATALOG_OP_REF="$CATALOG_OP_REF" uvx ...
    env -u PYTHONPATH uvx marimo edit --sandbox --no-token --headless --port "$PORT" notebooks/<first_notebook> > "$MARIMO_LOG" 2>&1 &
    MARIMO_PID=$!
    echo "marimo pid: $MARIMO_PID"
@@ -81,10 +100,6 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    Clamping to `$(ulimit -Hn)` never exceeds the hard cap, so it is a no-op where the limit is already high (macOS) and harmless everywhere.
    The trailing `&` is load-bearing: the marimo server must keep running while the setup continues.
    Keep `$PORT` - the next step needs it.
-   Thread the auth var from step 4 into the launch explicitly
-   (`env -u PYTHONPATH <AUTH_VAR>="<value>" uvx marimo ...`) rather than assuming inheritance:
-   direnv only hooks interactive shells, so a var exported by `.envrc` is invisible to the
-   non-interactive shell an agent launches from.
 
    Whether to pass `--headless` depends on who is composing:
 

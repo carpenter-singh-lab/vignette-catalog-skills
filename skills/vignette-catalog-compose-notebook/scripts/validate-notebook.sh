@@ -47,7 +47,7 @@ checks do not catch empty tables, wrong sign conventions, stale endpoints, or pl
 that render but say nothing. If you have not yet looked at the outputs in a live kernel,
 do that before calling the notebook done:
 
-  PORT=\$(python -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1])")
+  PORT=\$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1])")
   env -u PYTHONPATH uvx marimo edit --sandbox --no-token --port \$PORT $NB
 
 marimo may have written __marimo__/session/*.json as a local export artifact. Treat

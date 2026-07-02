@@ -73,7 +73,7 @@ Run in order; stop and report on any failure.
 
 6. Write a short `README.md`: what the catalog is, the one-row notebook list, setup instructions, links to sibling catalogs and to the vignette-catalog-skills repo. The setup section must include the post-clone skill restore (`npx skills update`), since the skill stores are gitignored and a cloner has only `skills-lock.json`.
 
-7. Fill `catalog.toml` with the orientation notebook's helper(s) and the data surface / auth.
+7. Fill `catalog.toml` with the orientation notebook's helper(s) and the data surface / auth. If the catalog accepts a secret-manager reference as an alternative to a raw token (e.g. an `op://` item resolved at runtime), declare that var in `[auth].indirect_env_var` - the setup skill probes the manifest, not TOML comments.
 
 8. Validate with the `validate-notebook.sh` bundled in the installed `vignette-catalog-compose-notebook` skill, passing `notebooks/nb01_orientation.py`. After step 4's `npx skills add` the script lands under `.agents/skills/` (universal install) or `.claude/skills/` (when the install targets Claude Code) - resolve whichever exists rather than assuming one:
 
