@@ -54,11 +54,15 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
      via a direnv `.envrc` or shell profile - once end-to-end:
      `op read "$CATALOG_OP_REF" >/dev/null && echo ok`. If the var comes from a direnv
      `.envrc`, run the probe as `direnv exec . op read ...` (non-interactive shells never load
-     direnv) and obtain the value to thread in step 5 the same way. Two traps here: sandboxed agent shells
-     block the IPC secret-manager CLIs use to reach their desktop app, so the probe fails
-     instantly - rerun it unsandboxed; and resolution may pop an interactive unlock/biometric
-     prompt on the user's screen - warn the user one may appear and allow well over 30 seconds
-     before calling it failed.
+     direnv) and obtain the value to thread in step 5 the same way. Traps here: sandboxed agent
+     shells block the IPC secret-manager CLIs use to reach their desktop app - run the probe
+     unsandboxed from the start, and do not infer the cause from the error or its latency (a
+     sandboxed failure can look identical to a locked app, e.g. `op`'s own ~60s `authorization
+     timeout`). Resolution may pop an interactive unlock/biometric prompt on the user's screen -
+     warn them one may appear; the CLI bounds the wait itself (`op`: ~60s per attempt). If
+     timeouts persist across unsandboxed retries, the desktop app itself may be wedged (stuck
+     post-auto-update, or a stale secret-manager daemon predating the running app) - have the
+     user restart the app, then re-probe.
 
    If no probe passes, stop: tell the user how to unblock (unlock the secret manager, or where to
    get a token - point to the catalog's README) and hand them the exact probe command so they can
@@ -104,7 +108,10 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    Ubuntu) and die with `Too many open files (os error 24)` ([astral-sh/uv#16999](https://github.com/astral-sh/uv/issues/16999)).
    Clamping to `$(ulimit -Hn)` never exceeds the hard cap, so it is a no-op where the limit is already high (macOS) and harmless everywhere.
    The trailing `&` is load-bearing: the marimo server must keep running while the setup continues.
-   Keep `$PORT` - the next step needs it.
+   Keep `$PORT` - the next step needs it. Shell state does not survive between an agent's
+   separate shell calls - that applies to `$PORT`, `$MARIMO_PID`, and later `$SESSION_ID` just as
+   much as to exported tokens; the snippet echoes them so you can re-inline the literal values in
+   later calls. The launch line also assumes the repo root as cwd (`notebooks/<first_notebook>`).
 
    Whether to pass `--headless` depends on who is composing:
 
@@ -158,6 +165,9 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
 
    This uses marimo-pair's documented code-mode path inside the running kernel; it is not local
    Python.
+   A failed cell surfaces as a per-cell error in the script's output, not as a nonzero exit -
+   read the output, don't trust the exit code. The loop is idempotent: if a cell errored
+   transiently (auth still settling, a slow first fetch), re-run the same block.
    Then spot-check that the kernel is genuinely usable before handing off - prefer one cheap call
    that exercises the full chain (an authenticated request through a catalog helper, or the shape
    of the notebook's main table) over merely printing a variable. An empty, unexecuted kernel and
@@ -185,6 +195,7 @@ the listener on the port and kill its whole process group:
 ```bash
 PGID=$(ps -o pgid= -p "$(lsof -ti tcp:$PORT -s tcp:LISTEN | head -1)" 2>/dev/null | tr -d ' ')
 [ -n "$PGID" ] && kill -TERM -"$PGID"
+sleep 3   # TERM is async - an immediate health check races it and reads "still up" spuriously
 curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && echo "still up - retry with kill -9 -$PGID" || echo "kernel on $PORT stopped"
 ```
 
@@ -194,6 +205,7 @@ exactly your kernel and nothing else.
 ## Notes
 
 - Public catalogs often need no auth; private or authenticated catalogs declare their required env var in `catalog.toml`.
+- On harnesses that sandbox shell commands, the step-4 secret probe is not the only step needing an unsandboxed run: the launch (binds and serves localhost, backgrounds a server), `register-session.py` (websocket), `execute-code.sh`, and the `lsof` teardown all need real localhost networking and process control. If any of them fails oddly under a sandbox, rerun unsandboxed before debugging anything else.
 - Do not improvise alternative launch commands; the `--sandbox` flag is what makes per-notebook dependencies work.
 - Do not improvise the headless session bootstrap either - the `scripts/register-session.py` stand-in is the supported way to register a kernel session without a browser. It exists so each agent does not re-derive a websocket client from scratch. Run it as an executable (the bare path in step 6) - its shebang provisions `websockets` via `uv run`. Invoking it as `python3 register-session.py` skips that and fails with `ModuleNotFoundError: websockets`; if a checkout dropped the executable bit, `chmod +x` it rather than reaching for `python3`.
 - `execute-code.sh` also accepts `--port "$PORT"`, which goes through registry discovery - but discovery is occasionally flaky (especially with several servers up) and then reports `No running marimo instances found` while the server is healthy. `--url "http://127.0.0.1:$PORT"` (as used in step 7) skips discovery entirely; it is the default here because it is the reliable path for an agent.
