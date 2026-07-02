@@ -35,15 +35,30 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    ```
 
    The skills CLI auto-detects common agents; pass `--agent <agent>` only when the project needs an explicit target.
+   Skip the add if marimo-pair is already installed - check the agent's skill stores first (e.g. `~/.claude/skills/marimo-pair` or the repo's `.claude/skills/`).
 
 4. **Check auth if the manifest declares it.**
-   If `auth` names an env var, confirm a `.env` exists and the var is set.
-   If not, stop and tell the user how to get the token (point to the catalog's README); do not proceed.
+   If `[auth]` names an env var, confirm the token is *obtainable* - not merely that some variable
+   is set. The var may arrive via a `.env`, a direnv `.envrc`, or the shell profile; and the
+   catalog may accept an indirect alternative (`[auth].indirect_env_var`): a variable holding a
+   secret-manager reference the catalog resolves at runtime (e.g. an `op://` item read via the
+   1Password CLI). Probe whichever form is present:
+
+   - **Direct token**: confirm the var is non-empty.
+   - **Indirect reference**: resolve it once end-to-end (e.g. `op read "$REF" >/dev/null && echo ok`).
+     Two traps here: sandboxed agent shells block the IPC secret-manager CLIs use to reach their
+     desktop app, so the probe fails instantly - rerun it unsandboxed; and resolution may pop an
+     interactive unlock/biometric prompt on the user's screen - warn the user one may appear and
+     allow well over 30 seconds before calling it failed.
+
+   If the probe fails, stop: tell the user how to unblock (unlock the secret manager, or where to
+   get a token - point to the catalog's README) and hand them the exact probe command so they can
+   verify it themselves before you retry. Do not proceed on an unproven token.
 
 5. **Launch the first notebook** in a sandbox, in the background, and remember the port:
 
    ```bash
-   PORT=$(python -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1])")
+   PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1])")
    MARIMO_LOG="${TMPDIR:-/tmp}/marimo-$PORT.log"
    echo "marimo port: $PORT"
    echo "marimo log: $MARIMO_LOG"
@@ -66,6 +81,10 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    Clamping to `$(ulimit -Hn)` never exceeds the hard cap, so it is a no-op where the limit is already high (macOS) and harmless everywhere.
    The trailing `&` is load-bearing: the marimo server must keep running while the setup continues.
    Keep `$PORT` - the next step needs it.
+   Thread the auth var from step 4 into the launch explicitly
+   (`env -u PYTHONPATH <AUTH_VAR>="<value>" uvx marimo ...`) rather than assuming inheritance:
+   direnv only hooks interactive shells, so a var exported by `.envrc` is invisible to the
+   non-interactive shell an agent launches from.
 
    Whether to pass `--headless` depends on who is composing:
 
@@ -95,8 +114,8 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
      ```
 
    In `marimo edit` mode the session persists after the helper exits, so this one-shot call is
-   enough - keep `$SESSION_ID` and target it with `execute-code.sh --port $PORT` (or
-   `--session $SESSION_ID`). The helper takes `--token`/`MARIMO_TOKEN` for token-protected
+   enough - keep `$SESSION_ID` and target it with `execute-code.sh --url "http://127.0.0.1:$PORT"`
+   (or `--session $SESSION_ID`). The helper takes `--token`/`MARIMO_TOKEN` for token-protected
    servers, and `--hold` for the rare server that drops the session on disconnect (RUN mode or
    `--session-ttl`); plain `marimo edit` needs neither. Confirm with
    `curl -s http://127.0.0.1:$PORT/api/sessions` that a session is now listed.
@@ -105,10 +124,10 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
    marimo only auto-runs cells when a browser frontend connects, so a freshly launched kernel
    can sit with all cells stale and every notebook variable undefined. Do not rely on the
    browser - run the cells explicitly through the marimo-pair `execute-code.sh` script you installed
-   in step 3, targeting `--port "$PORT"`:
+   in step 3, targeting `--url "http://127.0.0.1:$PORT"`:
 
    ```bash
-   bash <marimo-pair-skill-dir>/scripts/execute-code.sh --port "$PORT" <<'EOF'
+   bash <marimo-pair-skill-dir>/scripts/execute-code.sh --url "http://127.0.0.1:$PORT" <<'EOF'
    import marimo._code_mode as cm
 
    async with cm.get_context() as ctx:
@@ -119,8 +138,11 @@ Bring a freshly cloned catalog to a running marimo kernel, then hand off to comp
 
    This uses marimo-pair's documented code-mode path inside the running kernel; it is not local
    Python.
-   Then spot-check that a key variable resolved (e.g. print the shape of the notebook's main
-   table) before handing off. An empty, unexecuted kernel is the most common "it didn't work".
+   Then spot-check that the kernel is genuinely usable before handing off - prefer one cheap call
+   that exercises the full chain (an authenticated request through a catalog helper, or the shape
+   of the notebook's main table) over merely printing a variable. An empty, unexecuted kernel and
+   a half-proven auth path are the two most common "it didn't work"; this is the only step that
+   proves the whole chain end-to-end.
 
 8. **Hand off.**
    Tell the user the kernel is running on `$PORT` (and, if you registered one, that a session is
@@ -154,5 +176,5 @@ exactly your kernel and nothing else.
 - Public catalogs often need no auth; private or authenticated catalogs declare their required env var in `catalog.toml`.
 - Do not improvise alternative launch commands; the `--sandbox` flag is what makes per-notebook dependencies work.
 - Do not improvise the headless session bootstrap either - the `scripts/register-session.py` stand-in is the supported way to register a kernel session without a browser. It exists so each agent does not re-derive a websocket client from scratch. Run it as an executable (the bare path in step 6) - its shebang provisions `websockets` via `uv run`. Invoking it as `python3 register-session.py` skips that and fails with `ModuleNotFoundError: websockets`; if a checkout dropped the executable bit, `chmod +x` it rather than reaching for `python3`.
-- If `execute-code.sh --port "$PORT"` reports `No running marimo instances found` while the server is healthy (registry discovery is occasionally flaky, especially with several servers up), target it directly with `--url "http://127.0.0.1:$PORT"` - that skips discovery and is the more reliable path for an agent.
+- `execute-code.sh` also accepts `--port "$PORT"`, which goes through registry discovery - but discovery is occasionally flaky (especially with several servers up) and then reports `No running marimo instances found` while the server is healthy. `--url "http://127.0.0.1:$PORT"` (as used in step 7) skips discovery entirely; it is the default here because it is the reliable path for an agent.
 - If the repo gitignores its skill stores (tracks only `skills-lock.json`) and the catalog skills look missing or stale, restore them - but **not** with `npx skills update`. `update` only refreshes agent stores that **already exist on disk** and has no `--agent` flag (only `-g`/`-p`/`-y`): on a fresh clone it materializes the Universal store (`.agents/`) but not an agent-specific one like Claude Code's `.claude/skills/`, so the skills can look installed while the agent sees nothing. The only command that targets a specific store is `npx skills add <source> --agent <agent> -y` (e.g. `--agent claude-code`; comma-separate or `*` for several). Once that store exists, `update` will maintain it. Either way this is a refresh once you can run a command in the repo - it is **not** the clone-time bootstrap: a cloner who has *no* catalog skills on disk cannot reach this skill to run that step, so the post-clone restore lives in the repo's tracked `AGENTS.md` / `README.md`, not here, since a skill cannot bootstrap its own install.

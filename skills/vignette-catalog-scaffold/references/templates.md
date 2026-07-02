@@ -138,6 +138,7 @@ cache = ""                   # env var or path for large cached artifacts; omit 
 
 [auth]
 env_var = ""                 # required token var; empty = public
+indirect_env_var = ""        # optional: var holding a secret-manager reference (e.g. an op:// item) the catalog resolves at runtime; omit if none
 
 [getting_started]
 first_notebook = "nb01_orientation.py"

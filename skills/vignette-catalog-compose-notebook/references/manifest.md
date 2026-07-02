@@ -14,6 +14,7 @@ cache = "$CATALOG_CACHE"  # env var or path for large cached artifacts; omit if 
 
 [auth]
 env_var = ""              # required token var; empty = public
+indirect_env_var = ""     # optional: var holding a secret-manager reference (e.g. an op:// item) the catalog resolves at runtime; omit if none
 
 [getting_started]
 first_notebook = "nb01_orientation.py"
@@ -32,7 +33,7 @@ does     = "Compare a feature across two user-defined groups"
 
 How the skills use it:
 
-- `vignette-catalog-setup` reads `[getting_started].first_notebook` and `[auth].env_var`.
+- `vignette-catalog-setup` reads `[getting_started].first_notebook` and `[auth]` - it probes `env_var` directly, or resolves `indirect_env_var` when the catalog accepts a secret-manager reference instead of a raw token. An accepted alternative auth path belongs in `indirect_env_var`, not in a TOML comment, so setup can see it.
 - `vignette-catalog-compose-notebook` reads the `[[vignette]]` table to pick which notebooks to import, and `[data]`/`[auth]` to know the surface.
 - `vignette-catalog-scaffold` writes the initial `catalog.toml` and adds a `[[vignette]]` row when a composed notebook is promoted.
 
