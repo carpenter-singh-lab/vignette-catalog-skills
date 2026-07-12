@@ -134,6 +134,8 @@ description = "<one line>"
 
 [data]
 surface = "<DATA_SURFACE>"   # rest | duckdb | pooch | files
+version = ""                 # upstream release/snapshot/record id built against (e.g. "R14", a Zenodo id);
+                             # pins a rest surface where there is no file to hash. Empty = unversioned, note it in the notebook
 cache = ""                   # env var or path for large cached artifacts; omit if none
 
 [auth]

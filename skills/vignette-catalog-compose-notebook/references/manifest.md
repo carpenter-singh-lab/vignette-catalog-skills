@@ -10,6 +10,9 @@ description = "Exploration catalog for one dataset"
 
 [data]
 surface = "duckdb"        # one of: rest | duckdb | pooch | files
+version = ""              # upstream release/snapshot/record id the catalog was built against
+                          # (e.g. "R14", "24Q4", a Zenodo record id); pins a rest surface where
+                          # there is no file to hash. Empty = unversioned upstream - note that in the notebook
 cache = "$CATALOG_CACHE"  # env var or path for large cached artifacts; omit if none
 caveats = ""              # URL or repo-relative path to what the producers know and the files do not
                           # (known-bad samples, misleading identifiers, trust bounds); empty = none published
@@ -36,7 +39,7 @@ does     = "Compare a feature across two user-defined groups"
 How the skills use it:
 
 - `vignette-catalog-setup` reads `[getting_started].first_notebook` and `[auth]` - auth is required when either `env_var` or `indirect_env_var` is non-empty, and passing either probe satisfies it (`env_var` first, `indirect_env_var` as fallback). An accepted alternative auth path belongs in `indirect_env_var`, not in a TOML comment, so setup can see it.
-- `vignette-catalog-compose-notebook` reads the `[[vignette]]` table to pick which notebooks to import, and `[data]`/`[auth]` to know the surface. It reads `[data].caveats` before composing - see [data.md](data.md). Fill it in with whatever the dataset already publishes rather than inventing a format: a Cell Painting data repo's root `EXPERIMENT_NOTES.md`, a known-bad-plate catalog, an upstream release-notes page.
+- `vignette-catalog-compose-notebook` reads the `[[vignette]]` table to pick which notebooks to import, and `[data]`/`[auth]` to know the surface. It reads `[data].version` to pin the upstream a `rest` surface was built against and surfaces it in the notebook (see the REST pinning note in [data.md](data.md)), and `[data].caveats` before composing - see [data.md](data.md). Fill it in with whatever the dataset already publishes rather than inventing a format: a Cell Painting data repo's root `EXPERIMENT_NOTES.md`, a known-bad-plate catalog, an upstream release-notes page.
 - `vignette-catalog-scaffold` writes the initial `catalog.toml` and adds a `[[vignette]]` row when a composed notebook is promoted.
 
 Keep `catalog.toml` the single source of the vignette table.
