@@ -55,7 +55,7 @@ The composition mechanics below still apply throughout.
 2. **Orient from the manifest.** Read `catalog.toml` at the repo root for the vignette table (each notebook, its reusable `@app.function`s, and what they do), the data surface, and any auth.
    Then read the actual notebooks closest to the question - the helpers have docstrings and the cells are worked examples.
    See [references/manifest.md](references/manifest.md) for the schema.
-   If the data comes from a lab data repo (`cpg####-*`), read that repo's `EXPERIMENT_NOTES.md` for the experiment you are analyzing before you compose against it - it records what is odd about the data and how far it can be trusted, which no hash can tell you. See [references/data.md](references/data.md).
+   If the data comes from a lab data repo (`cpg####-*`), read that repo's `EXPERIMENT_NOTES.md` for the experiment you are analyzing before you compose against it - it records what is odd about the data and how far it can be trusted. See [references/data.md](references/data.md).
 
 3. **Pick the path.**
 
