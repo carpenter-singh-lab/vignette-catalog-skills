@@ -24,20 +24,26 @@ Some sources re-serialize on every fetch even when the data has not changed: a G
 Hashing the raw download then false-alarms download-to-download (two fetches seconds apart match; one an hour later does not).
 Pin the SHA-256 of the *canonical extracted content* instead - the parsed table, or the values you actually consume - so the check fires on a real upstream change and ignores cosmetic churn.
 
-**Read the dataset's `EXPERIMENT_NOTES.md` before you compose against it.**
+**Read the dataset's caveats before you compose against it.**
 A hash catches the bytes changing.
 It does not catch the bytes being fine and meaning something other than what you assume.
-Data repos (`cpg####-*`) carry a root-level `EXPERIMENT_NOTES.md`: one section per experiment, recording what is odd about it and how far it can be trusted.
-Read the section for the experiment you are analyzing, and treat its verdict as a constraint on what you may conclude.
+Every dataset carries knowledge its producers have and its files do not: which samples were dropped and repeated, which identifiers are misleading, which batch is unusable, which upstream release silently re-anchored the numbers.
+Point `[data].caveats` in `catalog.toml` at wherever that lives - a URL or a repo-relative path - and read it before you compose.
 
-Typical content, and why it is not optional:
+What it typically contains, and why it is not optional:
 
-- **Identifiers that do not mean what they look like.** A vendor's plate barcodes may map to in-house barcodes out of order, so joining on a sorted or zipped key silently swaps two plates. Every hash still passes.
-- **Known artifacts.** Out-of-focus wells, saturated channels, debris. A finding that tracks an artifact is not a finding.
-- **Verdicts.** "Proceed, but image quality may limit conclusions" is a bound on the claim you are allowed to make from that experiment.
+- **Identifiers that do not mean what they look like.** A vendor's sample barcodes may map to in-house barcodes out of order, so joining on a sorted or zipped key silently swaps two samples. Every hash still passes.
+- **Known artifacts.** A miscalibrated instrument, a contaminated batch, a channel that saturated. A finding that tracks an artifact is not a finding.
+- **Trust bounds.** "Proceed, but image quality may limit conclusions" is a bound on the claim you are allowed to make from that data, written by someone who saw it collected.
 
-If a note contradicts what you inferred from the data, the note wins - it was written by someone who was in the room.
-If the experiment's section says "No notes recorded," you are the first person to look; write down what you find.
+It takes whatever form the source already uses - a notes file in the data repo, a known-bad-samples list, an upstream release-notes page, a long-running issue thread.
+Do not invent a new format for a dataset that already has one; just point at it.
+
+If a caveat contradicts what you inferred from the data, neither override it silently nor defer to it silently: state the contradiction in the notebook and raise it.
+It was written by someone who was in the room and it is usually right, but a stale caveat that buries a real finding is the failure in the other direction, and only a human can tell those apart.
+
+If `[data].caveats` is empty, say so in the notebook.
+"The producers documented no caveats" and "nobody looked" are different claims, and a reader cannot distinguish them from silence.
 
 **Cache large remote artifacts** under `~/.cache/<catalog>` with an env-var override (for example, `CATALOG_CACHE`); check the cache first, fall back to remote.
 Commit small data (kilobytes); gitignore large data and the cache.

@@ -55,7 +55,7 @@ The composition mechanics below still apply throughout.
 2. **Orient from the manifest.** Read `catalog.toml` at the repo root for the vignette table (each notebook, its reusable `@app.function`s, and what they do), the data surface, and any auth.
    Then read the actual notebooks closest to the question - the helpers have docstrings and the cells are worked examples.
    See [references/manifest.md](references/manifest.md) for the schema.
-   If the data comes from a lab data repo (`cpg####-*`), read that repo's `EXPERIMENT_NOTES.md` for the experiment you are analyzing before you compose against it - it records what is odd about the data and how far it can be trusted. See [references/data.md](references/data.md).
+   Follow `[data].caveats` and read what the producers know that the files do not - known-bad samples, misleading identifiers, trust bounds. Do this before you compose, not after: it is the difference between a finding and an artifact. See [references/data.md](references/data.md).
 
 3. **Pick the path.**
 
@@ -144,7 +144,7 @@ A catalog can make it automatic with the bundled `scripts/red-team-on-stop.sh` a
 - [research-method.md](references/research-method.md) - **research-partner principles**: how to use the catalog (and subagents, literature, the web) for open-ended, hypothesis-driven research that earns trust
 - [communicating-the-analysis.md](references/communicating-the-analysis.md) - **how to present the result**: the hypothesis-experiment-observation loop, narrating the world not your own iteration, robust vs fragile, defining instruments
 - [conventions.md](references/conventions.md) - notebook structure, naming, imports, PEP 723, ruff
-- [data.md](references/data.md) - the four-tier data contract, SHA-256 pinning, caching, the dataset's `EXPERIMENT_NOTES.md`
+- [data.md](references/data.md) - the four-tier data contract, SHA-256 pinning, caching, the dataset's caveats
 - [indexing.md](references/indexing.md) - the `summary.json` envelope and the index notebook
 - [gotchas.md](references/gotchas.md) - marimo snapshots, altair/vega-lite, marimo cell traps
 - [manifest.md](references/manifest.md) - the `catalog.toml` schema
