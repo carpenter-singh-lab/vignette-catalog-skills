@@ -1,5 +1,5 @@
 .DS_Store
 
-# Third-party project skills are pinned in skills-lock.json.
+# Third-party project skills are recorded in skills-lock.json.
 .agents/
 .claude/skills/marimo-pair

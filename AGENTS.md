@@ -10,6 +10,12 @@ An installable collection of agent skills for the vignette-catalog method.
 Each skill under `skills/<name>/` is self-contained: a `SKILL.md` (frontmatter + body) plus its own `references/` and, where useful, `scripts/`.
 Skills are distributed via the [Agent Skills](https://agentskills.io) standard (`npx skills add carpenter-singh-lab/vignette-catalog-skills`).
 
+## Agent skill used to develop this repo
+
+The project-local `marimo-pair` dependency is recorded in `skills-lock.json` and installed into gitignored directories.
+After cloning, run `npx skills@1.5.20 add marimo-team/marimo-pair -s marimo-pair -a claude-code -a codex -y` from the repo root.
+The lock records an observed hash but not agent targets or an immutable revision for this plain source; replay the command to update and inspect `git diff -- skills-lock.json` before committing an intentional upstream change.
+
 ## Where things go in a skill
 
 A skill loads in three levels; put each thing where it is reached:
