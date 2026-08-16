@@ -16,6 +16,11 @@ A rule belongs in a `SKILL.md` only when an agent must make a decision; determin
 | Iteration 1 resolved installed scripts from the catalog root and bypassed a dependency-bearing shebang | State that paths are skill-relative and execute Python helpers directly | Compose workflow |
 | Iteration 1 let uv discover the catalog project, creating `.venv` and `uv.lock` | Run the session helper under `uv --no-project` | `scripts/catalog-session.py` |
 | Concurrent iteration 1 runs could stop an unrelated listener through an `lsof` fallback | Scope state to the catalog and stop only its recorded marimo process | `scripts/catalog-session.py` |
+| PR #9 review: concurrent starts overwrote state and left an orphan server | Serialize each catalog-port launch and write state atomically | `scripts/catalog-session.py` and regression tests |
+| PR #9 review: stale state could target a replacement process after PID reuse | Require a unique launch marker in addition to PID, birth time, command, notebook, and port | `scripts/catalog-session.py` and regression tests |
+| PR #9 review: validation rewrote source and snapshots before proving success | Restore both by default and make `--write` transactional | `scripts/validate-notebook.sh` and regression tests |
+| PR #9 review: scaffolding nested Git repositories and interpolated unchecked names | Prevalidate rendered assets and initialize Git only outside an existing worktree | Scaffold script and regression tests |
+| PR #9 review: indirect auth was ignored and comment-only dotenv values passed | Validate both auth declarations and parse dotenv comments | `scripts/catalog-session.py` and regression tests |
 | HCMI static checks passed semantically wrong outputs | Inspect real tables and rendered figures before the cold gate | Compose workflow |
 | `summary.json` and an index notebook were materially used only by dmx | Do not impose indexing on every catalog | Removed from the shared contract |
 | The automatic research red-team hook had no retained cache evidence across five audited catalogs | Keep research review outside this mechanical catalog skill | Hook and generic research method removed |

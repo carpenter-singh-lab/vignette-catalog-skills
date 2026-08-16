@@ -54,6 +54,7 @@ The current public examples are [jx](https://github.com/broadinstitute/jx), [fgx
 
 Behavioral regressions and the reason for each retained mechanism are recorded in [docs/INCIDENTS.md](docs/INCIDENTS.md).
 The evaluation cases live with the compose skill under `evals/`.
+Run the compact script regressions with `uv run tests/test_compact_scripts.py`.
 
 ## License
 

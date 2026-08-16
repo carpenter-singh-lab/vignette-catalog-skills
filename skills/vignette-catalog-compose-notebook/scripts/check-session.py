@@ -18,10 +18,31 @@ def main() -> int:
         print(f"missing session snapshot: {path}", file=sys.stderr)
         return 1
 
-    document = json.loads(path.read_text())
+    try:
+        document = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"invalid session snapshot: {path}: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(document, dict) or not isinstance(document.get("cells"), list):
+        print(f"invalid session snapshot structure: {path}", file=sys.stderr)
+        return 1
+    if not document["cells"]:
+        print(f"session snapshot contains no cells: {path}", file=sys.stderr)
+        return 1
     failures: list[str] = []
-    for cell in document.get("cells", []):
+    for cell in document["cells"]:
+        if not isinstance(cell, dict) or not isinstance(cell.get("outputs", []), list):
+            print(
+                f"invalid cell structure in session snapshot: {path}", file=sys.stderr
+            )
+            return 1
         for output in cell.get("outputs", []):
+            if not isinstance(output, dict):
+                print(
+                    f"invalid output structure in session snapshot: {path}",
+                    file=sys.stderr,
+                )
+                return 1
             if output.get("type") == "error":
                 failures.append(
                     f"cell {cell.get('id', '?')}: "

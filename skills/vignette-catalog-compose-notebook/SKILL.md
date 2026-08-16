@@ -44,7 +44,8 @@ Resolve `<skill-dir>` to this installed skill and execute its Python scripts dir
    bash <skill-dir>/scripts/validate-notebook.sh notebooks/<name>.py
    ```
 
-   The validator runs marimo checks, a stable Ruff rule set, formatting, cold execution, and an explicit scan for failed cells because marimo can report failure while exiting zero.
+   The validator runs pinned marimo checks, a stable Ruff rule set, cold execution, and an explicit scan for failed cells because marimo can report failure while exiting zero.
+   It restores source and snapshots by default; pass `--write` only when the catalog policy calls for formatting and a refreshed snapshot.
    Follow the catalog's own policy for generated session snapshots and analysis outputs.
 
 6. Report what ran, what you inspected, the answer and its limits, and the live URL if the session remains useful.

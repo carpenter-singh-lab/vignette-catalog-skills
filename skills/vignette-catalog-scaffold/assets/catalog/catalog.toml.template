@@ -9,6 +9,7 @@ caveats = ""
 
 [auth]
 env_var = ""
+indirect_env_var = ""
 
 [getting_started]
 first_notebook = "nb01_orientation.py"
