@@ -35,4 +35,4 @@ Add shared guidance only when all of the following hold:
 3. A script, schema, test, or catalog-local instruction cannot handle it more reliably.
 4. It belongs to the shared catalog workflow rather than one dataset or notebook.
 
-When a compact candidate fails an evaluation, add back the smallest mechanism that addresses that failure and rerun the old-versus-new comparison.
+When a candidate revision fails an evaluation, add back the smallest mechanism that addresses that failure and rerun the old-versus-new comparison.

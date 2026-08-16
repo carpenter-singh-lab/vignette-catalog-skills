@@ -1,7 +1,7 @@
 {
   "name": "vignette-catalog-skills",
   "version": "0.4.1",
-  "description": "Compact agent skills for building and composing marimo vignette catalogs.",
+  "description": "Agent skills for building and composing marimo vignette catalogs.",
   "author": {
     "name": "carpenter-singh-lab",
     "url": "https://github.com/carpenter-singh-lab/vignette-catalog-skills"

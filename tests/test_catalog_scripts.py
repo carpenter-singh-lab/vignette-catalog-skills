@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["websockets==15.0.1"]
 # ///
-"""Regression tests for the compact catalog scripts."""
+"""Regression tests for the catalog scripts."""
 
 from __future__ import annotations
 

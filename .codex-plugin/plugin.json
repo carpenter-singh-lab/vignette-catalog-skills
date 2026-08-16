@@ -1,7 +1,7 @@
 {
   "name": "vignette-catalog-skills",
   "version": "0.4.1",
-  "description": "Compact agent skills for building and composing marimo vignette catalogs.",
+  "description": "Agent skills for building and composing marimo vignette catalogs.",
   "author": {
     "name": "carpenter-singh-lab",
     "url": "https://github.com/carpenter-singh-lab/vignette-catalog-skills"
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Vignette Catalog Skills",
     "shortDescription": "Run, compose, and scaffold vignette catalogs",
-    "longDescription": "Use compact vignette-catalog skills to run existing catalogs, compose marimo notebooks from reusable helpers, or scaffold a new catalog.",
+    "longDescription": "Use vignette-catalog skills to run existing catalogs, compose marimo notebooks from reusable helpers, or scaffold a new catalog.",
     "developerName": "carpenter-singh-lab",
     "category": "Education & Research",
     "capabilities": ["Instructions"],
