@@ -1,0 +1,17 @@
+<DATA_IGNORE>
+# marimo execution artifacts
+notebooks/__marimo__/
+
+# Python and tool caches
+.venv/
+uv.lock
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# Installer-owned project skills
+.agents/
+.claude/skills/*
+
+# Local caches
+.cache/

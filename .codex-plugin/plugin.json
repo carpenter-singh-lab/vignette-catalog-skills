@@ -1,7 +1,7 @@
 {
   "name": "vignette-catalog-skills",
-  "version": "0.3.1",
-  "description": "Agent skills for building and composing vignette catalogs, plus a Stop hook that red-teams research notebooks against the research-method principles.",
+  "version": "0.4.0",
+  "description": "Compact agent skills for building and composing marimo vignette catalogs.",
   "author": {
     "name": "carpenter-singh-lab",
     "url": "https://github.com/carpenter-singh-lab/vignette-catalog-skills"
@@ -9,14 +9,13 @@
   "repository": "https://github.com/carpenter-singh-lab/vignette-catalog-skills",
   "license": "BSD-3-Clause",
   "skills": "./skills/",
-  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Vignette Catalog Skills",
-    "shortDescription": "Compose vignette-catalog notebooks with a red-team Stop hook",
-    "longDescription": "Use vignette-catalog skills to set up catalogs, compose marimo notebooks from reusable catalog helpers, and red-team research notebooks at turn end.",
+    "shortDescription": "Run, compose, and scaffold vignette catalogs",
+    "longDescription": "Use compact vignette-catalog skills to run existing catalogs, compose marimo notebooks from reusable helpers, or scaffold a new catalog.",
     "developerName": "carpenter-singh-lab",
     "category": "Education & Research",
-    "capabilities": ["Instructions", "Lifecycle hooks"],
+    "capabilities": ["Instructions"],
     "defaultPrompt": [
       "Compose a notebook from this vignette catalog"
     ]

@@ -1,0 +1,31 @@
+# AGENTS.md - <CATALOG_NAME>
+
+This repository is a vignette catalog for one dataset.
+`catalog.toml` is the routing manifest; notebooks are self-contained marimo programs and expose reusable top-level `@app.function` helpers.
+
+## Restore project skills after clone
+
+The installer-owned skill directories are gitignored.
+Run these exact commands from the repository root:
+
+```bash
+npx skills@1.5.20 add carpenter-singh-lab/vignette-catalog-skills -s vignette-catalog-compose-notebook -s vignette-catalog-scaffold -a claude-code -a codex -y
+npx skills@1.5.20 add marimo-team/marimo-pair -s marimo-pair -a claude-code -a codex -y
+```
+
+## Notebook work
+
+Read `catalog.toml` and use `vignette-catalog-compose-notebook` before running or changing a notebook.
+Open PEP 723 notebooks with `--sandbox`.
+Reuse existing helpers instead of creating a parallel data-access path.
+Inspect live outputs, then run the skill's `scripts/validate-notebook.sh` on every changed notebook.
+
+## Dataset contract
+
+- Surface: `<DATA_SURFACE>`.
+- Record dataset-specific versions, auth, caches, hashes, identifiers, and caveats in this repository.
+- Raw inputs are immutable; follow the existing data-directory policy for generated outputs.
+
+## Conventions
+
+Use semantic line breaks in Markdown, ASCII characters, and Conventional Commits.

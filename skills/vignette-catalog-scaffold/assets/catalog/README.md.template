@@ -1,0 +1,13 @@
+# <CATALOG_NAME>
+
+TODO: describe the dataset and the questions this catalog supports.
+
+## Notebooks
+
+| Notebook | Purpose |
+|---|---|
+| `nb01_orientation.py` | Reach the dataset and show one representative bounded result. |
+
+## Start
+
+Restore the project skills using the commands in `AGENTS.md`, then ask the agent to run or compose against this catalog.

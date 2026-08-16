@@ -1,0 +1,50 @@
+# /// script
+# requires-python = ">=3.12,<3.14"
+# dependencies = [
+#     "marimo",
+# ]
+# ///
+
+import marimo
+
+app = marimo.App(width="medium")
+
+with app.setup:
+    import marimo as mo
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    # <CATALOG_NAME> orientation
+
+    TODO: explain the dataset, its version, and what this bounded check establishes.
+    """)
+    return
+
+
+@app.function
+def reach_surface():
+    """Return one small real result from the catalog's <DATA_SURFACE> surface."""
+    raise NotImplementedError("replace with one bounded call to the actual dataset")
+
+
+@app.cell
+def _():
+    result = reach_surface()
+    result
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    ## To extend
+
+    - TODO: name the next concrete question.
+    """)
+    return
+
+
+if __name__ == "__main__":
+    app.run()

@@ -7,7 +7,7 @@ To work in a catalog that has these skills installed, read the installed skill, 
 
 An installable collection of agent skills for the vignette-catalog method.
 `README.md` is the human entry point and conceptual orientation.
-Each skill under `skills/<name>/` is self-contained: a `SKILL.md` (frontmatter + body) plus its own `references/` and, where useful, `scripts/`.
+Each skill under `skills/<name>/` is self-contained: a `SKILL.md` plus its own assets, references, and scripts where useful.
 Skills are distributed via the [Agent Skills](https://agentskills.io) standard (`npx skills add carpenter-singh-lab/vignette-catalog-skills`).
 
 ## Agent skill used to develop this repo
@@ -21,15 +21,18 @@ The lock records an observed hash but not agent targets or an immutable revision
 A skill loads in three levels; put each thing where it is reached:
 
 - **Frontmatter `name` + `description`** - always in context; the `description` is the trigger (what the skill does AND when to use it).
-- **`SKILL.md` body** - loaded on trigger; the procedure and pointers into `references/`. Keep it lean (well under ~500 lines).
-- **`references/` and `scripts/`** - loaded or executed on demand; operational depth and reusable scripts (e.g. `validate-notebook.sh`), not inlined in the body.
+- **`SKILL.md` body** - loaded on trigger; the procedure and pointers into `references/`.
+  Keep it lean (well under ~500 lines).
+- **`references/` and `scripts/`** - loaded or executed on demand; operational depth and reusable scripts (e.g.
+  `validate-notebook.sh`), not inlined in the body.
 
 ## Invariants specific to this collection
 
 These hold no matter which agent is editing, and their failure mode ships silently to every consumer - so they live here rather than in any general guide:
 
 - **Each skill is self-contained.** Do not reference a sibling skill's files by relative path - `npx skills add` can install one skill without the others.
-- **Skills are dataset-agnostic.** Anything dataset-specific belongs in a catalog's `catalog.toml`, never hardcoded here. Writing "JUMP" or "FinnGen" into a skill is a smell - extend the manifest schema instead.
+- **Skills are dataset-agnostic.** Anything dataset-specific belongs in a catalog's `catalog.toml`, never hardcoded here.
+  Writing "JUMP" or "FinnGen" into a skill is a smell - extend the manifest schema instead.
 - **This collection is the single source of truth.** Catalogs install these skills rather than copy them; a change here propagates by version bump, so do not let instance-specific drift back in.
 
 ## Authoring and iterating: use skill-creator
@@ -43,5 +46,6 @@ Prose in `.md` files uses semantic line breaks (one sentence per line).
 ASCII-only glyphs - hyphens, no em/en-dashes or arrows.
 Conventional Commits (`feat:`, `fix:`, `docs:`, ...).
 
-Skill names in this collection use the shared `vignette-catalog-*` namespace.
+The collection intentionally exposes only two user-facing skills: work in an existing catalog, or scaffold one.
+Skill names use the shared `vignette-catalog-*` namespace.
 Keep the folder name and frontmatter `name` identical, and put the precise trigger and boundary in `description`.
