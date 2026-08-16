@@ -16,11 +16,12 @@ MARIMO_PACKAGE="marimo==0.23.16"
 RUFF_PACKAGE="ruff@0.16.2"
 RUFF_RULES="E4,E7,E9,F"
 BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vignette-validator.XXXXXX")"
-CURRENT_NOTEBOOK=""
-CURRENT_NOTEBOOK_BACKUP=""
-CURRENT_SESSION=""
-CURRENT_SESSION_BACKUP=""
-CURRENT_SESSION_EXISTED=false
+NOTEBOOKS=("$@")
+NOTEBOOK_BACKUPS=()
+SESSIONS=()
+SESSION_BACKUPS=()
+SESSION_EXISTED=()
+PRESERVE_CHANGES=false
 
 remove_path() {
   python3 - "$1" <<'PY'
@@ -31,20 +32,23 @@ Path(sys.argv[1]).unlink(missing_ok=True)
 PY
 }
 
-restore_current() {
-  [[ -n "$CURRENT_NOTEBOOK" ]] || return 0
-  cp -p "$CURRENT_NOTEBOOK_BACKUP" "$CURRENT_NOTEBOOK"
-  if [[ "$CURRENT_SESSION_EXISTED" == true ]]; then
-    mkdir -p "$(dirname "$CURRENT_SESSION")"
-    cp -p "$CURRENT_SESSION_BACKUP" "$CURRENT_SESSION"
-  else
-    remove_path "$CURRENT_SESSION"
-  fi
+restore_all() {
+  for index in "${!NOTEBOOK_BACKUPS[@]}"; do
+    cp -p "${NOTEBOOK_BACKUPS[$index]}" "${NOTEBOOKS[$index]}"
+    if [[ "${SESSION_EXISTED[$index]}" == true ]]; then
+      mkdir -p "$(dirname "${SESSIONS[$index]}")"
+      cp -p "${SESSION_BACKUPS[$index]}" "${SESSIONS[$index]}"
+    else
+      remove_path "${SESSIONS[$index]}"
+    fi
+  done
 }
 
 cleanup() {
   status=$?
-  restore_current
+  if [[ "$PRESERVE_CHANGES" != true ]]; then
+    restore_all
+  fi
   python3 - "$BACKUP_DIR" <<'PY'
 from pathlib import Path
 import shutil
@@ -61,25 +65,33 @@ trap 'exit 143' TERM
 
 ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
 
-index=0
-for notebook in "$@"; do
+for notebook in "${NOTEBOOKS[@]}"; do
   if [[ ! -f "$notebook" ]]; then
     echo "not found: $notebook" >&2
     exit 2
   fi
+done
 
+for index in "${!NOTEBOOKS[@]}"; do
+  notebook="${NOTEBOOKS[$index]}"
   session="$(dirname "$notebook")/__marimo__/session/$(basename "$notebook").json"
-  CURRENT_NOTEBOOK="$notebook"
-  CURRENT_NOTEBOOK_BACKUP="$BACKUP_DIR/notebook-$index.py"
-  CURRENT_SESSION="$session"
-  CURRENT_SESSION_BACKUP="$BACKUP_DIR/session-$index.json"
-  CURRENT_SESSION_EXISTED=false
-  cp -p "$notebook" "$CURRENT_NOTEBOOK_BACKUP"
+  notebook_backup="$BACKUP_DIR/notebook-$index.py"
+  session_backup="$BACKUP_DIR/session-$index.json"
+  cp -p "$notebook" "$notebook_backup"
+  session_existed=false
   if [[ -f "$session" ]]; then
-    cp -p "$session" "$CURRENT_SESSION_BACKUP"
-    CURRENT_SESSION_EXISTED=true
+    cp -p "$session" "$session_backup"
+    session_existed=true
   fi
+  NOTEBOOK_BACKUPS+=("$notebook_backup")
+  SESSIONS+=("$session")
+  SESSION_BACKUPS+=("$session_backup")
+  SESSION_EXISTED+=("$session_existed")
+done
 
+for index in "${!NOTEBOOKS[@]}"; do
+  notebook="${NOTEBOOKS[$index]}"
+  session="${SESSIONS[$index]}"
   echo "==> marimo check: $notebook"
   if [[ "$write" == true ]]; then
     uvx "$MARIMO_PACKAGE" check --fix "$notebook"
@@ -105,11 +117,8 @@ for notebook in "$@"; do
 
   if [[ "$write" == true ]]; then
     echo "updated source formatting and session snapshot: $notebook"
-  else
-    restore_current
   fi
-  CURRENT_NOTEBOOK=""
-  index=$((index + 1))
 done
 
+PRESERVE_CHANGES="$write"
 echo "OK - static checks and cold execution passed for $# notebook(s)."

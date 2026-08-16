@@ -301,7 +301,10 @@ if "export" in args and "session" in args:
     session = notebook.parent / "__marimo__" / "session" / (notebook.name + ".json")
     session.parent.mkdir(parents=True, exist_ok=True)
     outputs = []
-    if os.environ.get("FAKE_SESSION_ERROR") == "1":
+    if (
+        os.environ.get("FAKE_SESSION_ERROR") == "1"
+        or os.environ.get("FAKE_FAIL_NOTEBOOK") == notebook.name
+    ):
         outputs = [{"type": "error", "evalue": "boom"}]
     session.write_text(json.dumps({"cells": [{"id": "cell", "outputs": outputs}]}) + "\\n")
 """
@@ -378,6 +381,53 @@ if "export" in args and "session" in args:
             self.assertEqual(notebook.read_text(), "value = 1\n")
             self.assertEqual(
                 session.read_text(), '{"cells": [{"id": "old", "outputs": []}]}\n'
+            )
+
+    def test_write_batch_failure_restores_every_notebook(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            notebooks = directory / "notebooks"
+            notebooks.mkdir()
+            session_directory = notebooks / "__marimo__" / "session"
+            session_directory.mkdir(parents=True)
+            notebook_paths = [notebooks / "nb01.py", notebooks / "nb02.py"]
+            session_paths = [
+                session_directory / "nb01.py.json",
+                session_directory / "nb02.py.json",
+            ]
+            for index, notebook in enumerate(notebook_paths, start=1):
+                notebook.write_text(f"value = {index}\n")
+            for index, session in enumerate(session_paths, start=1):
+                session.write_text(
+                    json.dumps({"cells": [{"id": f"old-{index}", "outputs": []}]})
+                    + "\n"
+                )
+            original_notebooks = [path.read_bytes() for path in notebook_paths]
+            original_sessions = [path.read_bytes() for path in session_paths]
+            binary, log = self.make_fake_uvx(directory)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
+            environment["FAKE_UVX_LOG"] = str(log)
+            environment["FAKE_SESSION_ERROR"] = "0"
+            environment["FAKE_FAIL_NOTEBOOK"] = "nb02.py"
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(VALIDATOR),
+                    "--write",
+                    *(str(path) for path in notebook_paths),
+                ],
+                capture_output=True,
+                text=True,
+                env=environment,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(
+                [path.read_bytes() for path in notebook_paths], original_notebooks
+            )
+            self.assertEqual(
+                [path.read_bytes() for path in session_paths], original_sessions
             )
 
 
