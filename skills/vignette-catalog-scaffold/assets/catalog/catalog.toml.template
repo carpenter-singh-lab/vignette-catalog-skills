@@ -1,0 +1,20 @@
+name = "<CATALOG_NAME>"
+description = "TODO: one-line dataset description"
+
+[data]
+surface = "<DATA_SURFACE>"
+version = ""
+cache = ""
+caveats = ""
+
+[auth]
+env_var = ""
+indirect_env_var = ""
+
+[getting_started]
+first_notebook = "nb01_orientation.py"
+
+[[vignette]]
+notebook = "nb01_orientation.py"
+helpers = ["reach_surface"]
+does = "Orientation: reach the dataset and show one representative bounded result"

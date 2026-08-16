@@ -1,57 +1,124 @@
 #!/usr/bin/env bash
-# Final mechanical gate for a composed or edited marimo notebook: lint, static-check,
-# then execute it from a clean slate via marimo export. This is the CI-style check you
-# run AFTER composing and looking in a live kernel (the marimo-pair skill) - not the
-# feedback loop itself.
-#
-# Usage: bash validate-notebook.sh notebooks/<topic>.py
 set -euo pipefail
 
-NB="${1:?usage: validate-notebook.sh notebooks/<topic>.py}"
+write=false
+if [[ "${1:-}" == "--write" ]]; then
+  write=true
+  shift
+fi
+if [[ $# -eq 0 ]]; then
+  echo "usage: validate-notebook.sh [--write] NOTEBOOK.py [...]" >&2
+  exit 2
+fi
 
-# Raise the open-file soft limit to the hard limit before any --sandbox provisioning.
-# uv's parallel bytecode-compile can exceed a low soft limit (1024 on stock Ubuntu) and die
-# with "Too many open files (os error 24)" - astral-sh/uv#16999. Clamping to $(ulimit -Hn)
-# never exceeds the hard cap, so it cannot itself error under set -e. uv ships its own
-# auto-raise (PR #17464, uv 0.9.26+) but it is gated behind the `adjust-ulimit` preview and
-# off by default, so we still do it here. Drop this once that preview graduates to on-by-default.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MARIMO_PACKAGE="marimo==0.23.16"
+RUFF_PACKAGE="ruff@0.16.2"
+RUFF_RULES="E4,E7,E9,F"
+BACKUP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vignette-validator.XXXXXX")"
+NOTEBOOKS=("$@")
+NOTEBOOK_BACKUPS=()
+SESSIONS=()
+SESSION_BACKUPS=()
+SESSION_EXISTED=()
+PRESERVE_CHANGES=false
+
+remove_path() {
+  python3 - "$1" <<'PY'
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).unlink(missing_ok=True)
+PY
+}
+
+restore_all() {
+  for index in "${!NOTEBOOK_BACKUPS[@]}"; do
+    cp -p "${NOTEBOOK_BACKUPS[$index]}" "${NOTEBOOKS[$index]}"
+    if [[ "${SESSION_EXISTED[$index]}" == true ]]; then
+      mkdir -p "$(dirname "${SESSIONS[$index]}")"
+      cp -p "${SESSION_BACKUPS[$index]}" "${SESSIONS[$index]}"
+    else
+      remove_path "${SESSIONS[$index]}"
+    fi
+  done
+}
+
+cleanup() {
+  status=$?
+  if [[ "$PRESERVE_CHANGES" != true ]]; then
+    restore_all
+  fi
+  python3 - "$BACKUP_DIR" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+
+shutil.rmtree(Path(sys.argv[1]), ignore_errors=True)
+PY
+  exit "$status"
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
 
-# marimo check --fix first: it auto-resolves markdown-indentation (and other) warnings on
-# mo.md cells. Running it BEFORE ruff format means ruff then formats the fixed output, and the
-# export below runs after both - so the committed .py is clean and execution sees
-# the final source.
-echo "==> marimo check --fix ($NB)"
-uvx marimo check --fix "$NB"
+for notebook in "${NOTEBOOKS[@]}"; do
+  if [[ ! -f "$notebook" ]]; then
+    echo "not found: $notebook" >&2
+    exit 2
+  fi
+done
 
-echo "==> ruff check + format ($NB)"
-uvx ruff check "$NB"
-uvx ruff format "$NB"
+for index in "${!NOTEBOOKS[@]}"; do
+  notebook="${NOTEBOOKS[$index]}"
+  session="$(dirname "$notebook")/__marimo__/session/$(basename "$notebook").json"
+  notebook_backup="$BACKUP_DIR/notebook-$index.py"
+  session_backup="$BACKUP_DIR/session-$index.json"
+  cp -p "$notebook" "$notebook_backup"
+  session_existed=false
+  if [[ -f "$session" ]]; then
+    cp -p "$session" "$session_backup"
+    session_existed=true
+  fi
+  NOTEBOOK_BACKUPS+=("$notebook_backup")
+  SESSIONS+=("$session")
+  SESSION_BACKUPS+=("$session_backup")
+  SESSION_EXISTED+=("$session_existed")
+done
 
-# Executing the notebook here surfaces runtime failures that static checks miss.
-# env -u PYTHONPATH avoids the Nix websockets shim.
-# --force-overwrite: without it, marimo SKIPS execution when a session snapshot is already
-#   up-to-date and still exits 0 - so the gate would print "OK" without re-running a thing.
-#   We always want a real cold execution here, so force it.
-# --no-continue-on-error: this gate checks one notebook; a failing cell must fail the gate.
-echo "==> execute notebook via marimo export (failure here is a real bug in the notebook)"
-env -u PYTHONPATH uvx marimo export session --sandbox --force-overwrite --no-continue-on-error "$NB"
+for index in "${!NOTEBOOKS[@]}"; do
+  notebook="${NOTEBOOKS[$index]}"
+  session="${SESSIONS[$index]}"
+  echo "==> marimo check: $notebook"
+  if [[ "$write" == true ]]; then
+    uvx "$MARIMO_PACKAGE" check --fix "$notebook"
+  else
+    uvx "$MARIMO_PACKAGE" check "$notebook"
+  fi
 
-cat <<EOF
+  echo "==> ruff: $notebook"
+  uvx "$RUFF_PACKAGE" check --select "$RUFF_RULES" "$notebook"
+  if [[ "$write" == true ]]; then
+    uvx "$RUFF_PACKAGE" format "$notebook"
+  else
+    uvx "$RUFF_PACKAGE" format --check "$notebook"
+  fi
 
-OK - mechanical gate passed: lint, static checks, and a clean from-scratch execution.
+  echo "==> cold execution: $notebook"
+  env -u PYTHONPATH uvx "$MARIMO_PACKAGE" export session \
+    --sandbox \
+    --force-overwrite \
+    --no-continue-on-error \
+    "$notebook"
+  python3 "$SCRIPT_DIR/check-session.py" "$session"
 
-This is the final check, not the feedback loop. By now you should have composed this
-notebook in a live kernel (the marimo-pair skill) and looked at every output - static
-checks do not catch empty tables, wrong sign conventions, stale endpoints, or plots
-that render but say nothing. If you have not yet looked at the outputs in a live kernel,
-do that before calling the notebook done:
+  if [[ "$write" == true ]]; then
+    echo "updated source formatting and session snapshot: $notebook"
+  fi
+done
 
-  PORT=\$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1])")
-  env -u PYTHONPATH uvx marimo edit --sandbox --no-token --port \$PORT $NB
-
-marimo may have written __marimo__/session/*.json as a local export artifact. Treat
-those as gitignored generated files; commit them only when this repo intentionally
-tracks snapshots for molab/static rendering (they can carry random widget ids and
-create noisy diffs).
-EOF
+PRESERVE_CHANGES="$write"
+echo "OK - static checks and cold execution passed for $# notebook(s)."

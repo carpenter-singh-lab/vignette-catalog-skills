@@ -1,0 +1,44 @@
+{
+  "skill_name": "vignette-catalog-compose-notebook",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create notebooks/nb06_catalog_inventory.py in this DMX catalog. Reuse the existing Breadbox helpers to show a one-row summary with the total number of live datasets and distinct data types, followed by a five-row dataset preview. Work through a live marimo kernel, inspect the real outputs, make the saved notebook self-contained, and prove it with a cold validation run. Do not add it to catalog.toml.",
+      "expected_output": "A validated marimo notebook that imports DMX's catalog helpers, makes bounded live Breadbox calls, and renders a nonempty summary and preview without duplicating the request layer.",
+      "files": [],
+      "expectations": [
+        "The saved notebook is a valid marimo notebook with PEP 723 dependencies and its cold session contains no cell errors.",
+        "The notebook imports list_datasets from nb02_dataset_discovery, obtains distinct data types from that result or list_data_types, and does not implement a second Breadbox request layer.",
+        "The rendered output contains a positive dataset count, a positive distinct-data-type count, and a dataset preview of no more than five rows.",
+        "The run report records evidence from a live marimo kernel and a successful cold validation.",
+        "catalog.toml is unchanged and does not register the evaluation notebook."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Create notebooks/nb09_mmp_crispr_activity.py in this JX catalog. For MMP1, MMP3, MMP9, and MMP14, show every requested gene, including unresolved or unscored genes, with its JCP2022 ID, nmAP, corrected p-value, and whether it is morphologically active at corrected p < 0.05. Reuse parse_gene_list from nb06 and resolve_jcps, activity_table, and build_panel from nb08. Avoid the full similarity matrix. Work through a live marimo kernel, inspect the real table, make the notebook self-contained, and prove it with a cold validation run. Do not add it to catalog.toml.",
+      "expected_output": "A validated marimo notebook that composes the named JX helpers, reads only the small CRISPR activity artifact, retains all four requested genes, and reports MMP14 as the only active perturbation at the stated threshold.",
+      "files": [],
+      "expectations": [
+        "The saved notebook is a valid marimo notebook with the transitive PEP 723 dependency union and its cold session contains no cell errors.",
+        "The notebook imports parse_gene_list, resolve_jcps, activity_table, and build_panel from the named catalog notebooks and does not call panel_submatrix or a cosine-matrix helper.",
+        "The rendered result contains all four genes with JCP2022 IDs and reports only MMP14 as active at corrected p < 0.05.",
+        "The MMP14 row reports JCP2022_804213 and a corrected p-value near 0.00018.",
+        "The run report records evidence from a live marimo kernel and a successful cold validation, and catalog.toml is unchanged."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Create notebooks/nb07_pcl_archive_shape.py in this PRX catalog. Reuse fetch_pcls_archive from nb06_cgi_shape_diversity and parse_gmt from nb02_figshare_pull, call parse_gmt(fetch_pcls_archive()), and display only a one-row Polars table with row_count and column_count for the parsed PCL assignments. Work through a live marimo kernel, inspect the real output, make the notebook self-contained, and prove it with a cold validation run. Do not add it to catalog.toml.",
+      "expected_output": "A validated marimo notebook that composes the two PRX helpers and renders row_count 5847 and column_count 2 from the pinned public PCL archive.",
+      "files": [],
+      "expectations": [
+        "The saved notebook is a valid marimo notebook with the transitive PEP 723 dependency union and its cold session contains no cell errors.",
+        "The notebook imports fetch_pcls_archive from nb06_cgi_shape_diversity and parse_gmt from nb02_figshare_pull instead of duplicating download or parsing logic.",
+        "The rendered one-row result reports row_count 5847 and column_count 2.",
+        "The run report records evidence from a live marimo kernel and a successful cold validation.",
+        "catalog.toml is unchanged and does not register the evaluation notebook."
+      ]
+    }
+  ]
+}

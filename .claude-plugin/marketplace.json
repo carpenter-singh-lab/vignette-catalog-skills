@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "vignette-catalog-skills",
-  "description": "The lab's vignette-catalog skills (scaffold, setup, compose-notebook) plus the research-method red-team Stop hook, as an installable plugin.",
+  "description": "The lab's compact skills for scaffolding and composing vignette catalogs.",
   "owner": {
     "name": "carpenter-singh-lab",
     "url": "https://github.com/carpenter-singh-lab/vignette-catalog-skills"
@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "vignette-catalog-skills",
-      "description": "Compose marimo notebooks from a vignette catalog, with an auto-wired Stop hook that red-teams research notebooks against research-method.md.",
+      "description": "Run, compose, and scaffold marimo vignette catalogs.",
       "source": "./",
       "category": "data-science"
     }

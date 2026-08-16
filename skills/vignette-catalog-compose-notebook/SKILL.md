@@ -1,150 +1,58 @@
 ---
 name: vignette-catalog-compose-notebook
 description: >-
-  Compose a marimo notebook that answers a data question by importing reusable
-  @app.function helpers from an existing vignette catalog, running each step in
-  a live kernel, and validating the final notebook. Use when a user asks for an
-  analysis, figure, vignette, or notebook against a catalog dataset, even if
-  they do not mention marimo or helper reuse - and ALSO when the ask is
-  open-ended research against the catalog: exploring the data, forming and
-  testing a hypothesis, hunting for a non-obvious or better result, comparing
-  approaches, or "doing the best you can" on a hard question. For those, the
-  skill carries research-partner principles (hypothesis-then-test, going past
-  the consensus answer, calibrating confidence, fanning out subagents, adversarial
-  self-critique). Do not use for generic notebook authoring outside a vignette
-  catalog; run vignette-catalog-setup first if no live kernel exists.
-allowed-tools: Bash, Read, Write, Glob, Grep, Task
+  Work in an existing vignette catalog: set it up, run or inspect its marimo
+  notebooks, and answer data questions by reusing their @app.function helpers
+  in a live kernel. Use whenever a repository has catalog.toml and the user
+  asks to get started, run notebooks, explore the data, make an analysis or
+  figure, or compose a new notebook. Do not use for generic notebooks or for
+  creating a new catalog.
+allowed-tools: Bash, Read, Write, Glob, Grep
 ---
 
-# Compose a notebook from a vignette catalog
+# Work in a vignette catalog
 
-Answer a question by composing existing catalog helpers in a live marimo kernel, not by writing a pipeline from scratch and checking it headless.
-The live kernel - driven by the `marimo-pair` skill - is where you compose and look; the `.py` on disk is the durable artifact you commit.
-The headless `validate-notebook.sh` is the final gate, not the feedback loop.
+A catalog is a `catalog.toml` plus self-contained marimo notebooks that double as worked examples and importable helper modules.
+Use `marimo-pair` for every live-kernel action.
+If that project skill is absent, stop and give the user the repository's documented install command rather than installing it implicitly.
+Resolve `<skill-dir>` to this installed skill and execute its Python scripts directly so their `uv` shebangs apply.
 
-## Why compose instead of writing fresh
+## Workflow
 
-- **Catalog over library.** The catalog's reusable logic lives as top-level `@app.function` cells in numbered notebooks, not a package.
-  Reuse them by importing; do not re-implement what a vignette already does, and do not reach for a `src/` package.
-- **Vignettes vs composed notebooks.** The catalog's curated notebooks (vignettes) each teach one move and earn their place.
-  What you produce here is a *composed* notebook - it only has to answer the question.
-  Most composed notebooks stay composed; few become vignettes.
-  This keeps the catalog small and high-signal.
-- **Compose in the kernel, not against it.** Build the notebook by editing the `.py` and running each changed cell in the live kernel, looking at the output as it lands.
-  Static checks pass on notebooks that return empty tables, wrong-signed correlations, or plots that render but say nothing; only a cell you have run and looked at is trustworthy.
-  Discovering what your outputs say is the kernel's job, not the headless gate's.
+1. Read the repository's `AGENTS.md`, `catalog.toml`, and any path named by `[data].caveats`.
+   Use the manifest to find likely notebooks, then read their actual code and docstrings.
+   The manifest is a curated routing table, not necessarily an inventory of every notebook or helper.
 
-## When it's research, not one figure
+2. Connect to the relevant notebook with `marimo-pair`.
+   Discover an existing session first.
+   If none fits, run `<skill-dir>/scripts/catalog-session.py start [notebook]`; omitting the notebook starts `[getting_started].first_notebook`.
+   The command prints the URL, port, and session id needed to target the kernel explicitly.
 
-Some asks are not "make this chart" but "what does this data say about X?", "find me a better target", "is this hypothesis right?", "do the best you can."
-Then you are a **research partner**: the deliverable is an evidence-built *argument*, honest about what it shows - and you can reach past the catalog (spawn subagents, read literature, search the web, hit other live APIs).
-The notebook is still where the argument lands and stays re-runnable.
+3. Take the shortest path that answers the question.
+   Change inputs in an existing notebook when its workflow already fits.
+   Otherwise create a composed notebook and import the closest helpers instead of recreating their requests, parsing, joins, or plots.
+   Read [references/notebook-contract.md](references/notebook-contract.md) when authoring or changing a notebook.
 
-Before a thread like that, read **[references/research-method.md](references/research-method.md)** - the moves that make it productive instead of a fluent restatement of the consensus (hypothesis-then-test-its-other-predictions, hunt past the consensus answer, do not confirm your own model, calibrate confidence, fan out subagents as on-demand instruments, red-team your own result, design the falsifier, confirm before outward actions).
-For how to *present* the result so a reader can trust it - the hypothesis-experiment-observation loop, narrating the world rather than your own iteration, separating robust from fragile, defining instruments - read **[references/communicating-the-analysis.md](references/communicating-the-analysis.md)**.
-The composition mechanics below still apply throughout.
+4. Work through the live kernel.
+   Use `marimo-pair` code mode for durable cell edits, run each changed cell, and inspect the returned tables and rendered figures before interpreting them.
+   Start remote or REST exploration with a bounded query, then widen deliberately.
+   Keep every dependency of the answer in the notebook, not only in scratch state.
 
-## Procedure
-
-1. **Ensure a live kernel.** You compose against a running marimo kernel driven by the `marimo-pair` skill.
-   If none is running - no `marimo-pair` session, no port you can post cells to - run `vignette-catalog-setup` first: it installs `marimo-pair`, launches the catalog's first notebook under `--sandbox`, runs its cells, and hands back a live kernel on a known port.
-   Headless with no browser is fine - setup creates the session for you with its bundled `scripts/register-session.py`; you do not need a browser or `agent-browser`.
-   Keep that port - but know it is the *first notebook's* sandbox, bound to that notebook.
-   A parameter swap (step 3) runs there directly; composing a new notebook gets its own kernel instead (step 3 explains why and how).
-
-2. **Orient from the manifest.** Read `catalog.toml` at the repo root for the vignette table (each notebook, its reusable `@app.function`s, and what they do), the data surface, and any auth.
-   Then read the actual notebooks closest to the question - the helpers have docstrings and the cells are worked examples.
-   See [references/manifest.md](references/manifest.md) for the schema.
-   Follow `[data].caveats` and read what the producers know that the files do not - known-bad samples, misleading identifiers, trust bounds. Do this before you compose, not after: it is the difference between a finding and an artifact. See [references/data.md](references/data.md).
-
-3. **Pick the path.**
-
-   - Parameter swap: the question is an existing vignette with different inputs -> change the inputs in the live notebook and re-run, cheapest.
-   - Compose: the question needs helpers from two or more notebooks -> add a new `notebooks/<topic>.py` that imports them.
-     Import helpers as plain Python; see [references/conventions.md](references/conventions.md) for the setup-block and `sys.path` recipe.
-
-**A composed notebook usually needs its own kernel - do not assume the handed-off one will do.** The kernel `vignette-catalog-setup` gives you runs the *first* notebook inside a `--sandbox` provisioned from *that* notebook's PEP 723 deps.
-The moment your composed `.py` declares a dependency the first notebook lacks - a plotting or dataframe library, say - importing it in the handed-off kernel fails with `ModuleNotFoundError`, because the sandbox was never told about it and `pip install` into a uv sandbox is not the path.
-So default to giving the composed notebook its own kernel.
-Launch a fresh one *on the composed notebook* and register a session, then target that new port for every "run a cell" in step 4.
-This is the same recipe `vignette-catalog-setup` step 5 uses, inlined here so you do not have to bounce back to that skill - launch, register, done:
-
-```bash
-PORT=$(python3 -c "import socket;s=socket.socket();s.bind(('127.0.0.1',0));print(s.getsockname()[1]);s.close()")
-env -u PYTHONPATH uvx marimo edit --sandbox --no-token --headless --host 127.0.0.1 --port "$PORT" notebooks/<topic>.py >/tmp/marimo_$PORT.log 2>&1 &
-until curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/" | grep -q 200; do sleep 2; done
-# headless, no browser: register the session that execute-code/marimo-pair attaches to
-<setup-skill-dir>/scripts/register-session.py --port "$PORT"
-```
-
-The `register-session.py` call is the load-bearing step the live kernel needs on a headless host - run it as an executable (its shebang provisions `websockets` via `uv run`); do not skip it and fall back to the export-only path.
-Do this even when your deps happen to match the first notebook's - the handed-off kernel is bound to *that* notebook, not yours, so reusing it is awkward and easy to get wrong.
-The dependency mismatch above is just the sharpest reason; "its own kernel" is the safe default regardless.
-The one case that stays on the handed-off kernel is a parameter swap: changing inputs in the existing notebook in place, not composing a new file.
-
-Either way the `.py` on disk is the source of truth: author cells there, then run them in the kernel to see the result.
-Scratch exploration can happen live, but anything the finished notebook depends on must land in the `.py`, not only in kernel state - a fresh kernel has to reproduce it.
-
-4. **Compose in the kernel - run, look, iterate.** This is the feedback loop.
-   Work one cell at a time: run the fetch first and look at the actual frame before writing any narrative around it; do not fabricate numbers or describe outputs you have not run.
-   On a REST or otherwise open-ended surface, bound that first fetch - one page, a small `limit`, a single id - before you widen.
-   An unbounded exploratory pull can crawl an entire table (a popular target's bioactivity set is tens of thousands of rows) and stall the loop before you have seen the shape of anything.
-   Look at the bounded slice, confirm the fields are what you expect, then raise the limit deliberately if the question actually needs more.
-   Then add each downstream cell, run it in the kernel via the `marimo-pair` execute scripts (targeting your port), and read the output before moving on.
-   When you edit a cell's source on disk, re-running it via `marimo-pair` runs the kernel's *in-memory* cell graph, not the file you just saved - so you keep executing the stale version and chase phantom errors (a `NameError` for a variable you already added, a fix that "doesn't take").
-   After editing a cell, reload it into the kernel (or relaunch the kernel on the edited `.py`) before re-running; the headless gate in step 5 sidesteps this entirely by running from a clean slate.
-   For charts, looking means inspecting the rendered image, not just confirming the cell ran without error.
-   In a live session, `ctx.screenshot` rasterizes the rendered DOM to a PNG - one call for matplotlib, altair/vega, plotly, or a widget alike.
-   See [references/viewing-outputs.md](references/viewing-outputs.md).
-   Keep going until every cell runs clean and says something true.
-
-**Headless does not mean no kernel - get a live one first.** No browser is *not* a reason to skip the live kernel.
-A headless host (remote, SSH, agent-driven) still runs the full cell-by-cell loop: `vignette-catalog-setup` launches the kernel `--headless` and registers a session with its bundled `scripts/register-session.py` - a websocket stand-in that creates the session `execute-code` attaches to, no browser and no `agent-browser`/Chrome needed.
-If no kernel is running, run that setup before composing; do not default to the export-only path below just because there is no display.
-The live kernel is not a nicety here: it holds your fetched data in memory, so an expensive pull (a whole drug-response screen, a big matrix) happens once and every later probe slices it instantly.
-Compose against the headless export instead and you re-fetch the same data on every probe - the single biggest avoidable cost on a REST surface like this catalog.
-
-**Genuinely no port (locked-down CI, no `claude`, no reachable kernel).** Only when you truly cannot stand up or reach a kernel, fall back to this substitute: author the cells in the `.py` (still the source of truth), run the headless gate in step 5 to execute the whole notebook from a clean slate, and look at the real outputs through an export rather than a live kernel - the tier-3 path in [references/viewing-outputs.md](references/viewing-outputs.md) (export PNGs, or read the session JSON, mindful that a `mo.ui.altair_chart`'s data is a base64 Arrow blob, not plain rows).
-The rule that you must look at actual outputs, not just a green check, is unchanged; only the surface you look at differs.
-Do not treat "the cell ran without error" as having looked.
-
-5. **Final check - the headless gate.** Once the notebook reads right in the kernel, run it from a clean slate to catch what only the live session was propping up (stale kernel state, import order, a cell that never re-ran).
-   Use the `scripts/validate-notebook.sh` bundled with this skill, passing the notebook path:
+5. Prove the saved notebook from a clean state:
 
    ```bash
-   # `npx skills add` installs to .agents/skills/ (universal) or .claude/skills/ (when it targets
-   # Claude Code) - resolve whichever exists rather than hardcoding one and hitting a missing path:
-   VALIDATE=$(ls .agents/skills/vignette-catalog-compose-notebook/scripts/validate-notebook.sh \
-                .claude/skills/vignette-catalog-compose-notebook/scripts/validate-notebook.sh 2>/dev/null | head -1)
-   bash "$VALIDATE" notebooks/<topic>.py
+   bash <skill-dir>/scripts/validate-notebook.sh notebooks/<name>.py
    ```
 
-It runs `marimo check --fix`, runs `ruff` on that notebook, and - last, after the final source edit - executes the notebook through marimo export.
-This is a CI-style gate, not where you discover what your outputs say - you already looked at those in the kernel (step 4).
-It may write `__marimo__/session/*.json` as a local export artifact; treat those as gitignored generated files.
-Commit them only when the repo explicitly tracks snapshots for molab/static rendering, and warn the user about that tradeoff first.
-The snapshot tradeoffs and other traps are in [references/gotchas.md](references/gotchas.md).
+   The validator runs pinned marimo checks, a stable Ruff rule set, cold execution, and an explicit scan for failed cells because marimo can report failure while exiting zero.
+   It restores source and snapshots by default; pass `--write` only when the catalog policy calls for formatting and a refreshed snapshot.
+   Follow the catalog's own policy for generated session snapshots and analysis outputs.
 
-For a **research** notebook (the "When it's research" path), run one more gate after the lint one: `scripts/red-team-notebook.sh <notebook.py>`.
-It spawns a fresh reviewer (`codex exec` when available, otherwise `claude -p`) that reads the notebook against `references/research-method.md` and flags the failure modes you cannot see from inside the work - a self-confirming model (#13), confirming the consensus and calling it a finding (#14), an echo treated as convergence, unstated instrument limits, uncalibrated confidence.
-This is the reasoning analog of the lint gate: lint catches a broken cell, this catches a fluent-but-circular argument, and it runs outside your own attention so the check cannot be rationalized away.
-A catalog can make it automatic with the bundled `scripts/red-team-on-stop.sh` as a `Stop` hook (see that script's header); then a flagged notebook blocks the turn until addressed.
+6. Report what ran, what you inspected, the answer and its limits, and the live URL if the session remains useful.
+   Stop a session you no longer need with `<skill-dir>/scripts/catalog-session.py stop <port>`.
+   Promote a composed notebook into `catalog.toml` only when the user wants it curated as a reusable vignette.
 
-6. **Write outputs and an index envelope.** Save analysis outputs under `data/processed/<topic>/`.
-   Write a `summary.json` envelope (`{description, numbers, files}`) next to them so the catalog's index notebook can pick it up - see [references/indexing.md](references/indexing.md).
-   Respect the data contract in [references/data.md](references/data.md): raw is immutable, fetches are SHA-256 pinned.
+## Running a catalog without composing
 
-7. **End with "## To extend"** - two or three concrete next questions, so the notebook is a launchpad.
-
-8. **Decide promotion.** Most composed notebooks stay composed notebooks.
-   A few earn catalog-vignette status, but only if they teach a reusable move and only by deliberate curation; if so, add a row to `catalog.toml`.
-
-## References
-
-- [research-method.md](references/research-method.md) - **research-partner principles**: how to use the catalog (and subagents, literature, the web) for open-ended, hypothesis-driven research that earns trust
-- [communicating-the-analysis.md](references/communicating-the-analysis.md) - **how to present the result**: the hypothesis-experiment-observation loop, narrating the world not your own iteration, robust vs fragile, defining instruments
-- [conventions.md](references/conventions.md) - notebook structure, naming, imports, PEP 723, ruff
-- [data.md](references/data.md) - the four-tier data contract, SHA-256 pinning, caching, the dataset's caveats
-- [indexing.md](references/indexing.md) - the `summary.json` envelope and the index notebook
-- [gotchas.md](references/gotchas.md) - marimo snapshots, altair/vega-lite, marimo cell traps
-- [manifest.md](references/manifest.md) - the `catalog.toml` schema
+When the user only wants setup or verification, start the requested notebook, run all cells through `marimo-pair`, inspect one meaningful output, and report the URL.
+When asked to verify the whole catalog, enumerate the actual notebook files rather than assuming `catalog.toml` is exhaustive, and validate each in a disposable worktree or archive if the catalog tracks generated snapshots.
