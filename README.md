@@ -18,6 +18,12 @@ npx skills@1.5.20 add carpenter-singh-lab/vignette-catalog-skills \
   -a codex \
   -y
 
+npx skills@1.5.20 add marimo-team/skills \
+  -s marimo-notebook \
+  -a claude-code \
+  -a codex \
+  -y
+
 npx skills@1.5.20 add marimo-team/marimo-pair \
   -s marimo-pair \
   -a claude-code \
@@ -38,7 +44,8 @@ The collection is also packaged as a Claude Code and Codex plugin when plugin in
 | [`vignette-catalog-scaffold`](skills/vignette-catalog-scaffold/SKILL.md) | Create or adopt the minimum catalog structure and orientation notebook. |
 
 The compose skill deliberately contains little prose.
-Operational behavior lives in its session and validation scripts, while dataset-specific versions, auth, caches, identifiers, hashes, and caveats stay in each catalog.
+The official `marimo-notebook` skill supplies general notebook-authoring guidance, while `marimo-pair` owns live-kernel interaction.
+Operational behavior lives in the compose skill's session and validation scripts, while dataset-specific versions, auth, caches, identifiers, hashes, and caveats stay in each catalog.
 
 ## Design
 

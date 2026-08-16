@@ -13,8 +13,9 @@ allowed-tools: Bash, Read, Write, Glob, Grep
 # Work in a vignette catalog
 
 A catalog is a `catalog.toml` plus self-contained marimo notebooks that double as worked examples and importable helper modules.
-Use `marimo-pair` for every live-kernel action.
-If that project skill is absent, stop and give the user the repository's documented install command rather than installing it implicitly.
+Use `marimo-notebook` for general notebook authoring and `marimo-pair` for every live-kernel action.
+Repository instructions, `catalog.toml`, and this skill's notebook contract override generic `marimo-notebook` advice when they are more specific.
+If either project skill is absent, stop and give the user the repository's documented install command rather than installing it implicitly.
 Resolve `<skill-dir>` to this installed skill and execute its Python scripts directly so their `uv` shebangs apply.
 
 ## Workflow

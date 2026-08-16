@@ -10,12 +10,14 @@ Run these exact commands from the repository root:
 
 ```bash
 npx skills@1.5.20 add carpenter-singh-lab/vignette-catalog-skills -s vignette-catalog-compose-notebook -s vignette-catalog-scaffold -a claude-code -a codex -y
+npx skills@1.5.20 add marimo-team/skills -s marimo-notebook -a claude-code -a codex -y
 npx skills@1.5.20 add marimo-team/marimo-pair -s marimo-pair -a claude-code -a codex -y
 ```
 
 ## Notebook work
 
 Read `catalog.toml` and use `vignette-catalog-compose-notebook` before running or changing a notebook.
+Repository instructions, `catalog.toml`, and the compose notebook contract override generic `marimo-notebook` advice when they are more specific.
 Open PEP 723 notebooks with `--sandbox`.
 Reuse existing helpers instead of creating a parallel data-access path.
 Inspect live outputs, then run the skill's `scripts/validate-notebook.sh` on every changed notebook.
