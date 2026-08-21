@@ -286,51 +286,44 @@ class CellStateTests(unittest.TestCase):
             [
                 {"id": "a", "name": "", "status": "stale", "errors": []},
                 {"id": "b", "name": "", "status": "stale", "errors": []},
-            ],
-            defined=1,
-            defs_total=1,
+            ]
         )
         mixed = self.report(
             [
                 {"id": "a", "name": "", "status": "idle", "errors": []},
                 {"id": "b", "name": "", "status": "stale", "errors": []},
-            ],
-            defined=1,
-            defs_total=1,
+            ]
         )
         self.assertEqual(SESSION.summarize_cells(stale_only)["stale"], 2)
-        self.assertTrue(SESSION.decide_run(stale_only, "sha"))
-        self.assertTrue(SESSION.decide_run(mixed, "sha"))
+        self.assertTrue(SESSION.decide_run(stale_only))
+        self.assertTrue(SESSION.decide_run(mixed))
 
     def test_decide_run(self) -> None:
-        idle = self.report(
-            [{"id": "a", "name": "", "status": "idle", "errors": []}],
-            defined=1,
-            defs_total=1,
-        )
+        idle = self.report([{"id": "a", "name": "", "status": "idle", "errors": []}])
         errored = self.report(
             [{"id": "a", "name": "", "status": "idle", "errors": ["boom"]}]
         )
-        uninstantiated = self.report(
-            [{"id": "a", "name": "", "status": "idle", "errors": []}],
-            defined=0,
-            defs_total=3,
+        self.assertTrue(SESSION.decide_run(None))
+        self.assertTrue(SESSION.decide_run(errored))
+        # marimo's explicit statuses are authoritative: an all-idle error-free
+        # report means the cells ran, so no rerun is needed.
+        self.assertFalse(SESSION.decide_run(idle))
+
+    def test_disabled_cells_never_force_a_rerun(self) -> None:
+        # marimo skips disabled and transitively disabled cells during runs,
+        # so treating them as unproven would rerun the same work on every
+        # open without ever changing the outcome.
+        disabled_only = self.report(
+            [{"id": "a", "name": "", "status": "disabled", "errors": []}]
         )
-        unknown = self.report(
-            [{"id": "a", "name": "", "status": "idle", "errors": []}],
-            defined=-1,
-            defs_total=0,
+        mixed = self.report(
+            [
+                {"id": "a", "name": "", "status": "idle", "errors": []},
+                {"id": "b", "name": "", "status": "disabled-transitively", "errors": []},
+            ]
         )
-        self.assertTrue(SESSION.decide_run(None, "sha"))
-        self.assertTrue(SESSION.decide_run(errored, "sha"))
-        self.assertTrue(SESSION.decide_run(uninstantiated, "sha"))
-        self.assertTrue(SESSION.decide_run(unknown, None))
-        self.assertFalse(SESSION.decide_run(unknown, "sha"))
-        # A diverged file must not trigger a rerun: the kernel would run the
-        # old code while appearing to prove the new file.
-        self.assertFalse(SESSION.decide_run(idle, "old-sha"))
-        self.assertFalse(SESSION.decide_run(idle, "sha"))
-        self.assertFalse(SESSION.decide_run(idle, None))
+        self.assertFalse(SESSION.decide_run(disabled_only))
+        self.assertFalse(SESSION.decide_run(mixed))
 
 
 class ReuseTests(unittest.TestCase):
@@ -544,7 +537,7 @@ class LockingTests(unittest.TestCase):
             SESSION.lock_path(root, 45698).unlink(missing_ok=True)
 
 
-class DivergedOpenTests(unittest.TestCase):
+class ReusePathOpenTests(unittest.TestCase):
     def open_arguments(self, notebook: Path, run: str):
         import argparse
 
@@ -559,17 +552,26 @@ class DivergedOpenTests(unittest.TestCase):
             json=False,
         )
 
-    def run_open(self, run: str) -> tuple[mock.Mock, str]:
+    def run_open(
+        self,
+        run: str,
+        notebook_file: str = "changed-since-run",
+        report: dict | None = None,
+    ) -> tuple[mock.Mock, mock.Mock, str]:
         import contextlib
         import io
 
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             (root / "catalog.toml").write_text("")
             notebook = root / "notebooks" / "nb01.py"
             notebook.parent.mkdir()
             notebook.write_text("value = 1\n")
             facts = {
+                "state": "ok",
+                "process": "ok",
+                "health": "ok",
+                "worktree": "ok",
                 "port": 45699,
                 "host": "127.0.0.1",
                 "url": "http://127.0.0.1:45699",
@@ -577,43 +579,171 @@ class DivergedOpenTests(unittest.TestCase):
                 "session": "sid",
                 "pid": 4242,
                 "log": str(root / "marimo.log"),
-                "notebook_file": "changed-since-run",
+                "notebook_file": notebook_file,
                 "last_run_sha": "old-sha",
             }
-            errored_report = {
-                "cells": [{"id": "a", "name": "", "status": "idle", "errors": ["boom"]}],
-                "defined": 1,
-                "defs_total": 1,
-            }
-            run_mock = mock.Mock(return_value=errored_report)
+            if report is None:
+                report = {
+                    "cells": [
+                        {"id": "a", "name": "", "status": "idle", "errors": ["boom"]}
+                    ]
+                }
+            run_mock = mock.Mock(return_value=report)
+            record_mock = mock.Mock()
             buffer = io.StringIO()
             with (
                 mock.patch.object(SESSION, "catalog_root", return_value=root),
                 mock.patch.object(SESSION, "find_reusable", return_value=facts),
+                mock.patch.object(SESSION, "session_facts", return_value=facts),
                 mock.patch.object(SESSION, "resolve_session", return_value="sid"),
-                mock.patch.object(
-                    SESSION, "wait_for_idle", return_value=errored_report
-                ),
+                mock.patch.object(SESSION, "wait_for_idle", return_value=report),
                 mock.patch.object(SESSION, "run_all_cells", run_mock),
+                mock.patch.object(SESSION, "record_run", record_mock),
                 contextlib.redirect_stdout(buffer),
             ):
                 SESSION.open_session(self.open_arguments(notebook, run))
-            return run_mock, buffer.getvalue()
+            return run_mock, record_mock, buffer.getvalue()
 
     def test_auto_open_never_reruns_a_diverged_kernel(self) -> None:
         # An errored report would normally trigger a rerun, but after an
         # external file edit that would execute the old kernel code while
         # appearing to prove the new file.
-        run_mock, output = self.run_open("auto")
+        run_mock, record_mock, output = self.run_open("auto")
         run_mock.assert_not_called()
+        record_mock.assert_not_called()
         self.assertIn("ran=skipped", output)
         self.assertIn("note=", output)
 
     def test_always_reruns_but_never_records_the_new_sha(self) -> None:
-        run_mock, output = self.run_open("always")
+        run_mock, record_mock, output = self.run_open("always")
         run_mock.assert_called_once()
-        self.assertIsNone(run_mock.call_args.args[4])
+        record_mock.assert_called_once()
+        self.assertIsNone(record_mock.call_args.args[2])
         self.assertIn("ran=all", output)
+
+    def test_disabled_cells_do_not_rerun_a_proven_session(self) -> None:
+        disabled_report = {
+            "cells": [
+                {"id": "a", "name": "", "status": "idle", "errors": []},
+                {"id": "b", "name": "", "status": "disabled", "errors": []},
+            ]
+        }
+        run_mock, _, output = self.run_open(
+            "auto", notebook_file="ok", report=disabled_report
+        )
+        run_mock.assert_not_called()
+        self.assertIn("ran=skipped", output)
+        self.assertIn("disabled=1", output)
+
+
+class ResolveSessionTests(unittest.TestCase):
+    def test_lone_session_with_mismatched_filename_is_rejected(self) -> None:
+        # A lone session whose filename contradicts the target notebook is a
+        # replacement session; adopting it would attach run evidence to the
+        # wrong kernel.
+        with mock.patch.object(
+            SESSION,
+            "server_sessions",
+            return_value={"s1": {"filename": "/x/other.py"}},
+        ):
+            self.assertIsNone(
+                SESSION.resolve_session(1, "127.0.0.1", "gone", Path("/x/nb.py"))
+            )
+
+    def test_lone_matching_or_unnamed_session_is_adopted(self) -> None:
+        with mock.patch.object(
+            SESSION,
+            "server_sessions",
+            return_value={"s1": {"filename": "/x/nb.py"}},
+        ):
+            self.assertEqual(
+                SESSION.resolve_session(1, "127.0.0.1", "gone", Path("/x/nb.py")),
+                "s1",
+            )
+        with mock.patch.object(
+            SESSION, "server_sessions", return_value={"s1": {}}
+        ):
+            self.assertEqual(
+                SESSION.resolve_session(1, "127.0.0.1", "gone", Path("/x/nb.py")),
+                "s1",
+            )
+
+    def test_recorded_session_wins_when_still_present(self) -> None:
+        with mock.patch.object(
+            SESSION,
+            "server_sessions",
+            return_value={"a": {"filename": "/x/nb.py"}, "b": {"filename": ""}},
+        ):
+            self.assertEqual(
+                SESSION.resolve_session(1, "127.0.0.1", "a", Path("/x/nb.py")), "a"
+            )
+
+
+class RunLockTests(unittest.TestCase):
+    def test_run_holds_the_port_lock_through_execution(self) -> None:
+        import argparse
+        import contextlib
+        import io
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "notebooks" / "nb01.py"
+            notebook.parent.mkdir()
+            notebook.write_text("value = 1\n")
+            port = 45701
+            facts = {
+                "state": "ok",
+                "process": "ok",
+                "health": "ok",
+                "worktree": "ok",
+                "port": port,
+                "host": "127.0.0.1",
+                "url": f"http://127.0.0.1:{port}",
+                "notebook": str(notebook),
+                "session": "sid",
+                "pid": 4242,
+                "log": str(root / "marimo.log"),
+                "notebook_file": "ok",
+            }
+            observed = {}
+
+            def probe_lock(*arguments, **keywords):
+                # Runs where run() resolves the session: a second process must
+                # find the port lock already held, proving stop cannot
+                # interleave between verification and the evidence update.
+                probe_code = (
+                    "import fcntl, sys\n"
+                    f"stream = open({str(SESSION.lock_path(root, port))!r}, 'a+')\n"
+                    "try:\n"
+                    "    fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+                    "    print('free')\n"
+                    "except OSError:\n"
+                    "    print('held')\n"
+                )
+                child = subprocess.run(
+                    [sys.executable, "-c", probe_code],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                observed["lock"] = child.stdout.strip()
+                return "sid"
+
+            report = {"cells": [{"id": "a", "name": "", "status": "idle", "errors": []}]}
+            record_mock = mock.Mock()
+            arguments = argparse.Namespace(port=port, run_timeout=600, json=False)
+            with (
+                mock.patch.object(SESSION, "catalog_root", return_value=root),
+                mock.patch.object(SESSION, "session_facts", return_value=facts),
+                mock.patch.object(SESSION, "resolve_session", side_effect=probe_lock),
+                mock.patch.object(SESSION, "run_all_cells", return_value=report),
+                mock.patch.object(SESSION, "record_run", record_mock),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                SESSION.run(arguments)
+            self.assertEqual(observed["lock"], "held")
+            record_mock.assert_called_once()
+            SESSION.lock_path(root, port).unlink(missing_ok=True)
 
 
 class EmitTests(unittest.TestCase):

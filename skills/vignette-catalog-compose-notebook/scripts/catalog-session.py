@@ -74,18 +74,7 @@ async with _cm.get_context() as _ctx:
                 "errors": [str(_error) for _error in (_cell.errors or [])],
             }
         )
-    _defs = set()
-    _defined = -1
-    try:
-        for _impl in _ctx.graph.cells.values():
-            _defs |= set(_impl.defs)
-        _defined = sum(1 for _name in _defs if _name in _ctx.globals)
-    except Exception:
-        pass
-print(
-    "VCS_CELLS"
-    + _json.dumps({"cells": _cells, "defined": _defined, "defs_total": len(_defs)})
-)
+print("VCS_CELLS" + _json.dumps({"cells": _cells}))
 """
 
 RUN_ALL_CODE = """
@@ -345,9 +334,12 @@ def report_is_busy(report: dict | None) -> bool:
     )
 
 
-def decide_run(report: dict | None, last_run_sha: str | None) -> bool:
+def decide_run(report: dict | None) -> bool:
     """Whether cells need an explicit run to make readiness truthful.
 
+    marimo's explicit statuses are authoritative: "stale" marks never-run and
+    invalidated code, so an all-idle error-free report needs no rerun, and
+    disabled cells are excluded because marimo will never run them.
     Callers gate this on the notebook file not having diverged: the kernel
     still holds the code it loaded at start, so an automatic rerun after an
     external file edit would prove the old code while looking like it proved
@@ -356,13 +348,7 @@ def decide_run(report: dict | None, last_run_sha: str | None) -> bool:
     if report is None:
         return True
     summary = summarize_cells(report)
-    if summary["errored"] or summary["stale"]:
-        return True
-    defined = report.get("defined", -1)
-    defs_total = report.get("defs_total", 0)
-    if defined == 0 and defs_total > 0:
-        return True
-    return defined < 0 and not last_run_sha
+    return bool(summary["errored"] or summary["stale"])
 
 
 def notebook_sha(path: Path) -> str:
@@ -407,6 +393,25 @@ def session_lock(root: Path, port: int):
         fcntl.flock(stream, fcntl.LOCK_EX)
         try:
             yield
+        finally:
+            fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def try_session_lock(root: Path, port: int):
+    """Non-blocking port lock; yields False when another operation holds it.
+
+    status uses this so it stays responsive while a long open or run holds a
+    port lock through cell execution.
+    """
+    with lock_path(root, port).open("a+") as stream:
+        try:
+            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            yield False
+            return
+        try:
+            yield True
         finally:
             fcntl.flock(stream, fcntl.LOCK_UN)
 
@@ -495,21 +500,38 @@ def write_state(path: Path, state: dict[str, object]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def update_state(root: Path, port: int, **fields: object) -> None:
-    """Read-modify-write one state file under its port lock.
+def update_state_locked(root: Path, port: int, **fields: object) -> None:
+    """Read-modify-write one state file; the caller must hold its port lock.
 
-    The lock plus the existence re-check stop this from resurrecting a state
-    file that a concurrent stop or status cleanup has just removed.
+    The existence re-check stops this from resurrecting a state file that a
+    concurrent stop or status cleanup has just removed.
     """
     path = state_path(root, port)
+    try:
+        state = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    state.update(fields)
+    if path.is_file():
+        write_state(path, state)
+
+
+def update_state(root: Path, port: int, **fields: object) -> None:
     with session_lock(root, port):
-        try:
-            state = json.loads(path.read_text())
-        except (OSError, json.JSONDecodeError):
-            return
-        state.update(fields)
-        if path.is_file():
-            write_state(path, state)
+        update_state_locked(root, port, **fields)
+
+
+def record_run(
+    root: Path, port: int, record_sha: str | None, locked: bool = False
+) -> None:
+    """Record run evidence; record_sha is the code the kernel actually ran."""
+    fields: dict[str, object] = {"last_run": time.time()}
+    if record_sha:
+        fields["last_run_sha"] = record_sha
+    if locked:
+        update_state_locked(root, port, **fields)
+    else:
+        update_state(root, port, **fields)
 
 
 def read_state(root: Path, port: int) -> dict | None:
@@ -629,7 +651,12 @@ def resolve_session(port: int, host: str, state_session: str, notebook: Path) ->
     if len(matches) == 1:
         return matches[0]
     if len(sessions) == 1:
-        return next(iter(sessions))
+        # Adopt a lone session only when it does not contradict the target
+        # notebook; a mismatched filename means a replacement session.
+        key, value = next(iter(sessions.items()))
+        filename = str(value.get("filename", "")) if isinstance(value, dict) else ""
+        if not filename:
+            return key
     return None
 
 
@@ -661,18 +688,13 @@ def wait_for_idle(
 
 
 def run_all_cells(
-    root: Path,
-    port: int,
-    host: str,
-    session_id: str,
-    record_sha: str | None,
-    timeout: float,
+    port: int, host: str, session_id: str, timeout: float
 ) -> dict | None:
-    """Run every cell, wait for a terminal state, and record the evidence.
+    """Run every cell and wait for a terminal state; writes no state.
 
-    record_sha is the sha of the notebook code the kernel is believed to hold;
-    pass None when the file has diverged so a stale sha is never overwritten
-    with one the kernel did not actually run.
+    Callers record run evidence themselves (record_run) so that execution and
+    its evidence update happen under one port lock and can never stamp a
+    replacement session's state.
     """
     ok, _, error = execute_code(port, host, session_id, RUN_ALL_CODE, timeout)
     report = wait_for_idle(port, host, session_id, timeout)
@@ -687,11 +709,6 @@ def run_all_cells(
             f"({summary['busy']} of {summary['total']}); "
             f"inspect with: catalog-session.py status"
         )
-    if report is not None:
-        fields: dict[str, object] = {"last_run": time.time()}
-        if record_sha:
-            fields["last_run_sha"] = record_sha
-        update_state(root, port, **fields)
     return report
 
 
@@ -848,6 +865,7 @@ def start(args: argparse.Namespace) -> int:
     notebook = selected_notebook(root, args.notebook)
     check_auth(root)
     checked_host(args.host)
+    current_sha = notebook_sha(notebook)
     port = args.port or free_port(args.host)
     started = time.monotonic()
     with session_lock(root, port):
@@ -859,13 +877,8 @@ def start(args: argparse.Namespace) -> int:
     run_seconds = 0.0
     if args.run:
         started = time.monotonic()
-        report = run_all_cells(
-            root,
-            port,
-            args.host,
-            str(state["session"]),
-            notebook_sha(notebook),
-            args.run_timeout,
+        report = fresh_session_run(
+            root, port, args.host, str(state["session"]), current_sha, args.run_timeout
         )
         run_seconds = time.monotonic() - started
         ran = "all"
@@ -874,6 +887,35 @@ def start(args: argparse.Namespace) -> int:
     pairs.append(("run_seconds", f"{run_seconds:.1f}"))
     emit(pairs, args.json)
     return 0
+
+
+def fresh_session_run(
+    root: Path,
+    port: int,
+    host: str,
+    session_id: str,
+    record_sha: str,
+    run_timeout: float,
+) -> dict | None:
+    """First run of a just-launched session, serialized with stop and status.
+
+    The launch lock was released, so re-verify under the port lock that the
+    recorded session is still the one we started before running and recording
+    evidence; a concurrent stop plus relaunch must never receive our stamp.
+    record_sha is the notebook sha captured before launch - the code the
+    kernel actually loaded.
+    """
+    with session_lock(root, port):
+        facts = session_facts(root, port)
+        if facts.get("state") != "ok" or facts.get("process") != "ok":
+            raise SystemExit(
+                f"session on port {port} disappeared before its first run; "
+                f"inspect with: catalog-session.py status"
+            )
+        report = run_all_cells(port, host, session_id, run_timeout)
+        if report is not None:
+            record_run(root, port, record_sha, locked=True)
+    return report
 
 
 def open_session(args: argparse.Namespace) -> int:
@@ -903,36 +945,41 @@ def open_session(args: argparse.Namespace) -> int:
 
     if facts is not None:
         port = int(facts["port"])
-        host = str(facts["host"])
-        if args.host is not None and args.host != host:
+        if args.host is not None and args.host != str(facts["host"]):
             print(
-                f"note: reusing the existing session bound to {host}; "
+                f"note: reusing the existing session bound to {facts['host']}; "
                 f"stop port {port} first to rebind to {args.host}",
                 file=sys.stderr,
             )
-        session_id = resolve_session(port, host, str(facts["session"]), notebook)
-        if session_id is None:
-            session_id = asyncio.run(register(port, args.timeout, host))
-        if session_id != facts["session"]:
-            update_state(root, port, session=session_id)
-            facts["session"] = session_id
-        report = wait_for_idle(port, host, session_id, args.run_timeout)
-        ran = "skipped"
-        diverged = facts.get("notebook_file") == "changed-since-run"
-        if args.run == "always" or (
-            args.run == "auto"
-            and not diverged
-            and decide_run(report, facts.get("last_run_sha"))
-        ):
-            report = run_all_cells(
-                root,
-                port,
-                host,
-                session_id,
-                None if diverged else current_sha,
-                args.run_timeout,
-            )
-            ran = "all"
+        # Hold the port lock through session resolution, execution, and the
+        # evidence update so a concurrent stop-and-relaunch can neither be
+        # stamped with this notebook's run evidence nor be misreported.
+        with session_lock(root, port):
+            facts = session_facts(root, port)
+            if not facts_reusable(facts, notebook):
+                raise SystemExit(
+                    f"session on port {port} changed while opening; rerun open "
+                    f"or inspect with: catalog-session.py status"
+                )
+            host = str(facts["host"])
+            session_id = resolve_session(port, host, str(facts["session"]), notebook)
+            if session_id is None:
+                session_id = asyncio.run(register(port, args.timeout, host))
+            if session_id != facts["session"]:
+                update_state_locked(root, port, session=session_id)
+                facts["session"] = session_id
+            report = wait_for_idle(port, host, session_id, args.run_timeout)
+            ran = "skipped"
+            diverged = facts.get("notebook_file") == "changed-since-run"
+            if args.run == "always" or (
+                args.run == "auto" and not diverged and decide_run(report)
+            ):
+                report = run_all_cells(port, host, session_id, args.run_timeout)
+                if report is not None:
+                    record_run(
+                        root, port, None if diverged else current_sha, locked=True
+                    )
+                ran = "all"
         notes = (DIVERGED_NOTE,) if diverged else ()
         emit(
             session_result(facts, reused=True, ran=ran, report=report, notes=notes),
@@ -945,7 +992,7 @@ def open_session(args: argparse.Namespace) -> int:
     run_seconds = 0.0
     if args.run != "never":
         started = time.monotonic()
-        report = run_all_cells(
+        report = fresh_session_run(
             root,
             int(state["port"]),
             str(state["host"]),
@@ -996,8 +1043,20 @@ def status(args: argparse.Namespace) -> int:
     for port in ports:
         # Re-verify and clean under the port lock so a session that start or
         # stop is concurrently touching is not misjudged or unlinked from
-        # under them.
-        with session_lock(root, port):
+        # under them; never block on a lock a long-running open or run holds.
+        with try_session_lock(root, port) as acquired:
+            if not acquired:
+                blocks.append(
+                    {
+                        "port": port,
+                        "state": "busy",
+                        "note": (
+                            "another helper operation holds this session's "
+                            "lock; retry shortly"
+                        ),
+                    }
+                )
+                continue
             facts = session_facts(root, port)
             if facts.get("state") == "malformed" or facts.get("process") in (
                 "dead",
@@ -1051,36 +1110,42 @@ def status(args: argparse.Namespace) -> int:
 
 def run(args: argparse.Namespace) -> int:
     root = catalog_root()
-    facts = session_facts(root, args.port)
-    if facts.get("state") != "ok" or facts.get("process") != "ok":
-        raise SystemExit(
-            f"no verified session on port {args.port}; run: catalog-session.py status"
-        )
-    if facts.get("health") != "ok":
-        raise fail(
-            f"session on port {args.port} is not answering its health endpoint",
-            str(facts.get("log") or ""),
-        )
-    notebook = Path(str(facts["notebook"]))
-    if not notebook.is_file():
-        raise SystemExit(
-            f"notebook no longer exists: {notebook} (worktree moved or trashed?); "
-            f"stop the session with: catalog-session.py stop {args.port}"
-        )
-    host = str(facts["host"])
-    session_id = resolve_session(args.port, host, str(facts["session"]), notebook)
-    if session_id is None:
-        session_id = asyncio.run(register(args.port, 30, host))
-        update_state(root, args.port, session=session_id)
-    diverged = facts.get("notebook_file") == "changed-since-run"
-    report = run_all_cells(
-        root,
-        args.port,
-        host,
-        session_id,
-        None if diverged else notebook_sha(notebook),
-        args.run_timeout,
-    )
+    # Everything from verification through the evidence update happens under
+    # the port lock, so a concurrent stop-and-relaunch on this port can never
+    # receive run evidence from the session this command verified.
+    with session_lock(root, args.port):
+        facts = session_facts(root, args.port)
+        if facts.get("state") != "ok" or facts.get("process") != "ok":
+            raise SystemExit(
+                f"no verified session on port {args.port}; "
+                f"run: catalog-session.py status"
+            )
+        if facts.get("health") != "ok":
+            raise fail(
+                f"session on port {args.port} is not answering its health endpoint",
+                str(facts.get("log") or ""),
+            )
+        notebook = Path(str(facts["notebook"]))
+        if not notebook.is_file():
+            raise SystemExit(
+                f"notebook no longer exists: {notebook} (worktree moved or "
+                f"trashed?); stop the session with: catalog-session.py stop "
+                f"{args.port}"
+            )
+        host = str(facts["host"])
+        session_id = resolve_session(args.port, host, str(facts["session"]), notebook)
+        if session_id is None:
+            session_id = asyncio.run(register(args.port, 30, host))
+            update_state_locked(root, args.port, session=session_id)
+        diverged = facts.get("notebook_file") == "changed-since-run"
+        report = run_all_cells(args.port, host, session_id, args.run_timeout)
+        if report is not None:
+            record_run(
+                root,
+                args.port,
+                None if diverged else notebook_sha(notebook),
+                locked=True,
+            )
     summary = summarize_cells(report)
     notes = (DIVERGED_NOTE,) if diverged else ()
     emit(
@@ -1233,7 +1298,11 @@ def main() -> int:
     run_parser.add_argument("--json", action="store_true")
     run_parser.set_defaults(function=run)
 
-    stop_parser = subparsers.add_parser("stop", help="stop a session this helper owns")
+    stop_parser = subparsers.add_parser(
+        "stop",
+        help="stop a session this helper owns "
+        "(waits for any in-flight open or run on that port)",
+    )
     stop_parser.add_argument("port", type=int)
     stop_parser.add_argument("--timeout", type=float, default=5)
     stop_parser.add_argument(
