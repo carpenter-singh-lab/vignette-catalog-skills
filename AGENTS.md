@@ -1,3 +1,6 @@
+Before working in this repository, read and follow `CONSTITUTION.md`.
+Direct user instructions and the more specific instructions in this file override it.
+
 # AGENTS.md - vignette-catalog-skills
 
 Guidance for agents working **on this repository** (authoring and editing the skills themselves).
