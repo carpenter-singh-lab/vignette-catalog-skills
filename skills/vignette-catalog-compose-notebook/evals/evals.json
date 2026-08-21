@@ -63,6 +63,117 @@
         "The result is reported in well under ten seconds.",
         "The report repeats the live URL, session id, and cell-state summary."
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Get this DMX catalog running so I can start from its recommended notebook. I did not choose a notebook path.",
+      "expected_output": "The catalog's [getting_started].first_notebook is resolved and opened through the same one-command session path as an exact-notebook request.",
+      "files": [],
+      "expectations": [
+        "One catalog-session.py open invocation with no notebook argument resolves catalog.toml's first_notebook.",
+        "The report names exactly notebooks/nb01_orientation.py and includes its URL, session id, and clean cell-state summary.",
+        "No compose-only reference or unrelated notebook code is read."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "The JX notebooks/nb06_query_genes.py session is already live. In that same notebook, change the gene input to MMP1 and MMP3 and tell me the resolved Entrez IDs. Keep the existing kernel.",
+      "expected_output": "marimo-pair changes the live input in the exact existing session, observes the reactive result, and reports MMP1=4312 and MMP3=4314 without starting another kernel.",
+      "files": [],
+      "expectations": [
+        "The exact existing session is reused and no second marimo server or kernel is started.",
+        "The input is changed through marimo-pair code mode rather than by editing the notebook file.",
+        "The live result reports MMP1 as Entrez 4312 and MMP3 as Entrez 4314.",
+        "The notebook source is unchanged."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Open notebooks/nb03_gene_dependency_profile.py in this DMX catalog. Its nb01_orientation.py session is already healthy; leave that unrelated session alone.",
+      "expected_output": "A second exact-notebook session is started for nb03 while the healthy nb01 session remains owned, healthy, and unchanged.",
+      "files": [],
+      "expectations": [
+        "One catalog-session.py open invocation starts nb03 rather than reusing the mismatched nb01 session.",
+        "Status reports both exact notebook paths with distinct ports and clean cell summaries.",
+        "The existing nb01 session is neither stopped nor changed while nb03 opens."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Open this DMX catalog's recommended notebook directly on the machine's trusted Tailscale address so I can reach it without an SSH tunnel.",
+      "expected_output": "The default notebook binds and reports a directly reachable trusted-host URL, with no tunnel setup or manual server reconstruction.",
+      "files": [],
+      "expectations": [
+        "catalog-session.py open is called without a notebook path and with the trusted address passed through --host.",
+        "The reported URL uses the trusted address and answers the helper's health checks.",
+        "The default notebook runs cleanly without SSH forwarding."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Start the recommended notebook headlessly, then open its reported URL in a browser and continue in the same runtime.",
+      "expected_output": "The helper-created session runs headlessly and the browser reconnects to that same live notebook runtime.",
+      "files": [],
+      "expectations": [
+        "The headless helper launch reports one explicit URL and session id with clean cells.",
+        "The browser reports that it reconnected to the existing session and shows its live output.",
+        "Status after browser attachment still reports the intended healthy runtime and explicit file/runtime truth."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Audit and recover the catalog session records after stale, malformed, moved-worktree, replaced-process, and replaced-session failures. Do not affect unrelated marimo servers.",
+      "expected_output": "Every invalid ownership or state case is rejected or surfaced with an actionable recovery command, and only verified owned processes can be stopped.",
+      "files": [],
+      "expectations": [
+        "Malformed and stale state is reported and cleaned without crashing or being resurrected.",
+        "Moved-worktree state is visible from another catalog and recoverable with --root.",
+        "Replaced process or session identity is rejected before execution or run evidence changes.",
+        "Unrelated marimo processes remain untouched."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Open the recommended notebook with an empty dependency cache and report provisioning separately from notebook execution.",
+      "expected_output": "The cold launch ends in one usable session result whose startup and cell-run timings distinguish provisioning from orchestration.",
+      "files": [],
+      "expectations": [
+        "The run uses an empty isolated uv cache rather than claiming a warm launch is cold.",
+        "The output reports startup_seconds and run_seconds separately.",
+        "The command ends with one URL, one session id, and a clean cell-state summary."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "In this JX catalog, what Entrez IDs does the existing gene-query workflow resolve for MMP1 and MMP3? Adapt the existing notebook in a live kernel if that is shorter than creating a new notebook, and leave a durable artifact only if the answer needs one.",
+      "expected_output": "The existing nb06 workflow is reused in its live kernel, the requested IDs are verified from real outputs, and no unnecessary notebook is created.",
+      "files": [],
+      "expectations": [
+        "The agent routes to the relevant existing notebook instead of composing a new one by default.",
+        "marimo-pair is used to change or inspect the live workflow and the reported IDs come from that run.",
+        "The answer reports MMP1=4312 and MMP3=4314 with no unnecessary new notebook."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Open scratch/demo.py, a standalone marimo notebook in a repository that has no catalog.toml, and help me edit its chart.",
+      "expected_output": "The vignette catalog skill does not trigger; generic marimo notebook tooling handles the request.",
+      "files": [],
+      "expectations": [
+        "vignette-catalog-compose-notebook is not selected because the repository is not a catalog.",
+        "The response does not require catalog.toml or invoke catalog-session.py."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Explore this JX catalog for an interesting, evidence-backed comparison among the available gene activity workflows. Use the live data to decide what is worth reporting and state the limits of what you find.",
+      "expected_output": "The request follows the compose mechanics, reuses relevant catalog helpers in a live kernel, and reports only claims supported by inspected outputs.",
+      "files": [],
+      "expectations": [
+        "The agent reads catalog routing and caveats, then selects relevant existing helpers rather than treating the request as run-only.",
+        "Exploration and follow-up computations are batched through marimo-pair, with reported claims tied to inspected live outputs.",
+        "The answer states scientific or data limits without loading generic research methodology from this skill."
+      ]
     }
   ]
 }

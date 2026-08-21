@@ -55,15 +55,14 @@ If either project skill is absent, stop and give the user the repository's docum
    Use the manifest to find likely notebooks, then read their actual code and docstrings.
    The manifest is a curated routing table, not necessarily an inventory of every notebook or helper.
 
-2. Connect to the relevant notebook with `marimo-pair`, using the session from `catalog-session.py open` (it reuses an existing healthy session before starting a new one).
-   The output has the URL, port, and session id needed to target the kernel explicitly.
-   During a live session the active runtime is the source of truth; the saved file is the durable artifact you validate at the end.
-
-3. Take the shortest path that answers the question.
+2. Take the shortest path that answers the question.
    Change inputs in an existing notebook when its workflow already fits.
    Otherwise create a composed notebook and import the closest helpers instead of recreating their requests, parsing, joins, or plots.
    Read [references/notebook-contract.md](references/notebook-contract.md) when authoring or changing a notebook.
-   A composed notebook needs its own kernel: start it with `catalog-session.py start notebooks/<name>.py`.
+
+3. For a new composition, create its smallest valid marimo scaffold, including the initial setup imports.
+   Open the exact notebook you are adapting or composing with `catalog-session.py open notebooks/<name>.py`.
+   Use the reported URL and session id with `marimo-pair`; the active runtime is authoritative until you validate the saved file.
 
 4. Work through the live kernel.
    Use `marimo-pair` code mode for durable cell edits, run each changed cell, and inspect the returned tables and rendered figures before interpreting them.

@@ -72,15 +72,23 @@ def hold_catalog_lock(root: str, delay: float, events) -> None:
         events.put(("exit", time.monotonic()))
 
 
-def unlink_state_under_lock(root: str, port: int, delay: float, events) -> None:
-    with SESSION.session_lock(Path(root), port):
-        SESSION.state_path(Path(root), port).unlink(missing_ok=True)
-        events.put(("locked", time.monotonic()))
-        time.sleep(delay)
-        events.put(("released", time.monotonic()))
-
-
 class SessionTests(unittest.TestCase):
+    def test_default_notebook_comes_from_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebooks = root / "notebooks"
+            notebooks.mkdir()
+            expected = notebooks / "nb02.py"
+            expected.write_text("pass\n")
+            (notebooks / "nb01.py").write_text("pass\n")
+            (root / "catalog.toml").write_text(
+                '[getting_started]\nfirst_notebook = "nb02.py"\n'
+            )
+            self.assertEqual(SESSION.selected_notebook(root, None), expected.resolve())
+            (root / "catalog.toml").write_text("")
+            with self.assertRaises(SystemExit):
+                SESSION.selected_notebook(root, None)
+
     def test_lock_serializes_same_catalog_and_port(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             context = multiprocessing.get_context("fork")
@@ -228,7 +236,6 @@ class SessionTests(unittest.TestCase):
             (root / ".env").write_text("TOKEN_REF=op://vault/item # comment\n")
             with mock.patch.dict(os.environ, {}, clear=True):
                 SESSION.check_auth(root)
-
 
 class HostTests(unittest.TestCase):
     def test_probe_host_maps_wildcards_to_loopback(self) -> None:
@@ -506,37 +513,6 @@ class LockingTests(unittest.TestCase):
             self.assertGreaterEqual(second_enter[1], first_exit[1])
             SESSION.catalog_lock_path(Path(directory)).unlink(missing_ok=True)
 
-    def test_update_state_cannot_resurrect_removed_state(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            port = 45697
-            path = SESSION.state_path(root, port)
-            path.write_text(json.dumps({"port": port, "root": str(root)}))
-            context = multiprocessing.get_context("fork")
-            events = context.Queue()
-            remover = context.Process(
-                target=unlink_state_under_lock, args=(directory, port, 0.5, events)
-            )
-            remover.start()
-            locked = events.get(timeout=2)
-            self.assertEqual(locked[0], "locked")
-            # The state was unlinked under the lock; update_state must wait
-            # for the lock and then decline to recreate the file.
-            SESSION.update_state(root, port, last_run=1.0)
-            released = events.get(timeout=2)
-            self.assertEqual(released[0], "released")
-            remover.join(timeout=2)
-            self.assertFalse(path.exists())
-            SESSION.lock_path(root, port).unlink(missing_ok=True)
-
-    def test_update_state_on_missing_state_is_a_no_op(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            SESSION.update_state(root, 45698, last_run=1.0)
-            self.assertFalse(SESSION.state_path(root, 45698).exists())
-            SESSION.lock_path(root, 45698).unlink(missing_ok=True)
-
-
 class ReusePathOpenTests(unittest.TestCase):
     def open_arguments(self, notebook: Path, run: str):
         import argparse
@@ -598,7 +574,7 @@ class ReusePathOpenTests(unittest.TestCase):
                 mock.patch.object(SESSION, "resolve_session", return_value="sid"),
                 mock.patch.object(SESSION, "wait_for_idle", return_value=report),
                 mock.patch.object(SESSION, "run_all_cells", run_mock),
-                mock.patch.object(SESSION, "record_run", record_mock),
+                mock.patch.object(SESSION, "record_run_locked", record_mock),
                 contextlib.redirect_stdout(buffer),
             ):
                 SESSION.open_session(self.open_arguments(notebook, run))
@@ -701,7 +677,7 @@ class FreshRunTests(unittest.TestCase):
         with (
             mock.patch.object(SESSION, "session_facts", return_value=facts),
             mock.patch.object(SESSION, "run_all_cells", run_mock),
-            mock.patch.object(SESSION, "record_run", record_mock),
+            mock.patch.object(SESSION, "record_run_locked", record_mock),
         ):
             return SESSION.fresh_session_run(
                 root,
@@ -816,7 +792,7 @@ class RunLockTests(unittest.TestCase):
                 mock.patch.object(SESSION, "session_facts", return_value=facts),
                 mock.patch.object(SESSION, "resolve_session", side_effect=probe_lock),
                 mock.patch.object(SESSION, "run_all_cells", return_value=report),
-                mock.patch.object(SESSION, "record_run", record_mock),
+                mock.patch.object(SESSION, "record_run_locked", record_mock),
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 SESSION.run(arguments)

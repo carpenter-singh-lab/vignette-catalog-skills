@@ -102,13 +102,9 @@ def selected_notebook(root: Path, value: str | None) -> Path:
     else:
         manifest = tomllib.loads((root / "catalog.toml").read_text())
         first = manifest.get("getting_started", {}).get("first_notebook")
-        if first:
-            path = root / "notebooks" / first
-        else:
-            matches = sorted((root / "notebooks").glob("nb*.py"))
-            if not matches:
-                raise SystemExit("no notebook given and no first notebook found")
-            path = matches[0]
+        if not isinstance(first, str) or not first:
+            raise SystemExit("no notebook given and no [getting_started].first_notebook found")
+        path = root / "notebooks" / first
     path = path.resolve()
     if not path.is_file():
         raise SystemExit(f"notebook not found: {path}")
@@ -516,22 +512,12 @@ def update_state_locked(root: Path, port: int, **fields: object) -> None:
         write_state(path, state)
 
 
-def update_state(root: Path, port: int, **fields: object) -> None:
-    with session_lock(root, port):
-        update_state_locked(root, port, **fields)
-
-
-def record_run(
-    root: Path, port: int, record_sha: str | None, locked: bool = False
-) -> None:
-    """Record run evidence; record_sha is the code the kernel actually ran."""
+def record_run_locked(root: Path, port: int, record_sha: str | None) -> None:
+    """Record run evidence while the caller holds this port's lock."""
     fields: dict[str, object] = {"last_run": time.time()}
     if record_sha:
         fields["last_run_sha"] = record_sha
-    if locked:
-        update_state_locked(root, port, **fields)
-    else:
-        update_state(root, port, **fields)
+    update_state_locked(root, port, **fields)
 
 
 def read_state(root: Path, port: int) -> dict | None:
@@ -692,9 +678,8 @@ def run_all_cells(
 ) -> dict | None:
     """Run every cell and wait for a terminal state; writes no state.
 
-    Callers record run evidence themselves (record_run) so that execution and
-    its evidence update happen under one port lock and can never stamp a
-    replacement session's state.
+    Callers record run evidence themselves so execution and its evidence update
+    happen under one port lock and can never stamp a replacement session.
     """
     ok, _, error = execute_code(port, host, session_id, RUN_ALL_CODE, timeout)
     report = wait_for_idle(port, host, session_id, timeout)
@@ -928,7 +913,7 @@ def fresh_session_run(
             )
         report = run_all_cells(port, host, session_id, run_timeout)
         if report is not None:
-            record_run(root, port, record_sha, locked=True)
+            record_run_locked(root, port, record_sha)
     return report
 
 
@@ -990,9 +975,7 @@ def open_session(args: argparse.Namespace) -> int:
             ):
                 report = run_all_cells(port, host, session_id, args.run_timeout)
                 if report is not None:
-                    record_run(
-                        root, port, None if diverged else current_sha, locked=True
-                    )
+                    record_run_locked(root, port, None if diverged else current_sha)
                 ran = "all"
         notes = (DIVERGED_NOTE,) if diverged else ()
         emit(
@@ -1155,11 +1138,8 @@ def run(args: argparse.Namespace) -> int:
         diverged = facts.get("notebook_file") == "changed-since-run"
         report = run_all_cells(args.port, host, session_id, args.run_timeout)
         if report is not None:
-            record_run(
-                root,
-                args.port,
-                None if diverged else notebook_sha(notebook),
-                locked=True,
+            record_run_locked(
+                root, args.port, None if diverged else notebook_sha(notebook)
             )
     summary = summarize_cells(report)
     notes = (DIVERGED_NOTE,) if diverged else ()
@@ -1172,34 +1152,22 @@ def run(args: argparse.Namespace) -> int:
 
 def recorded_group(root: Path, port: int) -> tuple[int, int, str, str, Path] | None:
     path = state_path(root, port)
-    if not path.is_file():
-        return None
+    state = read_state(root, port)
     try:
-        state = json.loads(path.read_text())
+        if state is None:
+            raise ValueError
         pid = int(state["pid"])
         pgid = int(state["pgid"])
         recorded_port = int(state["port"])
-        notebook = str(state["notebook"])
         process_start = str(state["process_start"])
-        process_command = str(state["process_command"])
         process_marker = str(state["process_marker"])
-        if state.get("root") != str(root) or pgid != pid or recorded_port != port:
-            path.unlink(missing_ok=True)
-            return None
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    except (KeyError, TypeError, ValueError):
         path.unlink(missing_ok=True)
         return None
-
-    identity = process_identity(pid)
     if (
-        identity is None
-        or identity[0] != process_start
-        or identity[1] != process_command
-        or identity[2] != pgid
-        or not process_has_marker(pid, process_marker)
-        or "marimo" not in process_command
-        or notebook not in process_command
-        or f"--port {port}" not in process_command
+        state.get("root") != str(root)
+        or recorded_port != port
+        or verify_process(state) != "ok"
     ):
         path.unlink(missing_ok=True)
         return None
