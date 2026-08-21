@@ -36,6 +36,24 @@ Track `skills-lock.json`, ignore installer-owned skill directories, and repeat t
 
 The collection is also packaged as a Claude Code and Codex plugin when plugin installation is preferred.
 
+## Start a new catalog
+
+Give a new agent session this prompt:
+
+```text
+Install https://github.com/carpenter-singh-lab/vignette-catalog-skills; create two notebooks for DATASET_URL.
+```
+
+The template is 7 words and 109 characters when `DATASET_URL` is counted literally.
+The only required dataset-specific value is a direct public source URL; add a target path only when its location matters.
+`Install` makes the cold session load the catalog workflow, and `two` is the shortest tested wording that fixes the deliverable count.
+
+For example:
+
+```text
+Install https://github.com/carpenter-singh-lab/vignette-catalog-skills; create two notebooks for https://raw.githubusercontent.com/allisonhorst/palmerpenguins/main/inst/extdata/penguins.csv.
+```
+
 ## Skills
 
 | Skill | Purpose |
