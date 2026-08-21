@@ -878,7 +878,13 @@ def start(args: argparse.Namespace) -> int:
     if args.run:
         started = time.monotonic()
         report = fresh_session_run(
-            root, port, args.host, str(state["session"]), current_sha, args.run_timeout
+            root,
+            port,
+            args.host,
+            str(state["session"]),
+            notebook,
+            current_sha,
+            args.run_timeout,
         )
         run_seconds = time.monotonic() - started
         ran = "all"
@@ -894,23 +900,31 @@ def fresh_session_run(
     port: int,
     host: str,
     session_id: str,
+    notebook: Path,
     record_sha: str,
     run_timeout: float,
 ) -> dict | None:
     """First run of a just-launched session, serialized with stop and status.
 
     The launch lock was released, so re-verify under the port lock that the
-    recorded session is still the one we started before running and recording
-    evidence; a concurrent stop plus relaunch must never receive our stamp.
-    record_sha is the notebook sha captured before launch - the code the
-    kernel actually loaded.
+    recorded state still describes exactly the session we started - same
+    session id and same notebook - before running and recording evidence.
+    A concurrent stop plus relaunch on this port is otherwise healthy and
+    verified too, and must never be run with our session id or stamped with
+    our notebook's sha. record_sha is the notebook sha captured before
+    launch - the code the kernel actually loaded.
     """
     with session_lock(root, port):
         facts = session_facts(root, port)
-        if facts.get("state") != "ok" or facts.get("process") != "ok":
+        if (
+            facts.get("state") != "ok"
+            or facts.get("process") != "ok"
+            or facts.get("session") != session_id
+            or facts.get("notebook") != str(notebook)
+        ):
             raise SystemExit(
-                f"session on port {port} disappeared before its first run; "
-                f"inspect with: catalog-session.py status"
+                f"session on port {port} was replaced or stopped before its "
+                f"first run; rerun open or inspect with: catalog-session.py status"
             )
         report = run_all_cells(port, host, session_id, run_timeout)
         if report is not None:
@@ -997,6 +1011,7 @@ def open_session(args: argparse.Namespace) -> int:
             int(state["port"]),
             str(state["host"]),
             str(state["session"]),
+            notebook,
             current_sha,
             args.run_timeout,
         )

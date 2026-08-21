@@ -679,6 +679,85 @@ class ResolveSessionTests(unittest.TestCase):
             )
 
 
+class FreshRunTests(unittest.TestCase):
+    def fresh_facts(self, root: Path, notebook: Path, session: str) -> dict:
+        return {
+            "state": "ok",
+            "process": "ok",
+            "health": "ok",
+            "worktree": "ok",
+            "port": 45702,
+            "host": "127.0.0.1",
+            "notebook": str(notebook),
+            "session": session,
+            "pid": 4242,
+            "log": str(root / "marimo.log"),
+            "notebook_file": "ok",
+        }
+
+    def call(
+        self, facts: dict, notebook: Path, root: Path, run_mock, record_mock
+    ):
+        with (
+            mock.patch.object(SESSION, "session_facts", return_value=facts),
+            mock.patch.object(SESSION, "run_all_cells", run_mock),
+            mock.patch.object(SESSION, "record_run", record_mock),
+        ):
+            return SESSION.fresh_session_run(
+                root,
+                45702,
+                "127.0.0.1",
+                "original-session",
+                notebook,
+                "original-sha",
+                600,
+            )
+
+    def make_mocks(self):
+        report = {"cells": [{"id": "a", "name": "", "status": "idle", "errors": []}]}
+        return mock.Mock(return_value=report), mock.Mock()
+
+    def test_replacement_session_is_rejected_not_stamped(self) -> None:
+        # A stop plus relaunch between launch and first run yields a healthy,
+        # verified state for a different session; running with the original
+        # session id or recording the original sha would attach false
+        # evidence to the replacement kernel.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "notebooks" / "nb01.py"
+            notebook.parent.mkdir()
+            notebook.write_text("value = 1\n")
+            run_mock, record_mock = self.make_mocks()
+            facts = self.fresh_facts(root, notebook, "replacement-session")
+            with self.assertRaises(SystemExit):
+                self.call(facts, notebook, root, run_mock, record_mock)
+            run_mock.assert_not_called()
+            record_mock.assert_not_called()
+            other_notebook = root / "notebooks" / "nb02.py"
+            facts = self.fresh_facts(root, other_notebook, "original-session")
+            with self.assertRaises(SystemExit):
+                self.call(facts, notebook, root, run_mock, record_mock)
+            run_mock.assert_not_called()
+            record_mock.assert_not_called()
+            SESSION.lock_path(root, 45702).unlink(missing_ok=True)
+
+    def test_matching_identity_runs_and_records(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "notebooks" / "nb01.py"
+            notebook.parent.mkdir()
+            notebook.write_text("value = 1\n")
+            run_mock, record_mock = self.make_mocks()
+            facts = self.fresh_facts(root, notebook, "original-session")
+            result = self.call(facts, notebook, root, run_mock, record_mock)
+            self.assertIsNotNone(result)
+            run_mock.assert_called_once()
+            self.assertEqual(run_mock.call_args.args[2], "original-session")
+            record_mock.assert_called_once()
+            self.assertEqual(record_mock.call_args.args[2], "original-sha")
+            SESSION.lock_path(root, 45702).unlink(missing_ok=True)
+
+
 class RunLockTests(unittest.TestCase):
     def test_run_holds_the_port_lock_through_execution(self) -> None:
         import argparse
