@@ -39,6 +39,30 @@
         "The run report records evidence from a live marimo kernel and a successful cold validation.",
         "catalog.toml is unchanged and does not register the evaluation notebook."
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "Open notebooks/nb02_dataset_discovery.py in this DMX catalog so I can view and iterate on it.",
+      "expected_output": "A usable live session for exactly that notebook, reached through the session helper alone, with the URL, session id, and an explicit cell-state summary reported.",
+      "files": [],
+      "expectations": [
+        "The session is launched or reused exclusively through catalog-session.py; no ad hoc nohup, pgrep, ss, curl, or /api/sessions reconstruction appears.",
+        "At most two shell invocations occur after the repository instructions are read.",
+        "The report includes the url, the session id, and a cell summary showing every cell ran without errors.",
+        "No compose-only references, research guidance, or unrelated notebook code are read for this run-only request."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Open notebooks/nb02_dataset_discovery.py in this DMX catalog so I can view and iterate on it. (A healthy session for that exact notebook already exists.)",
+      "expected_output": "The existing session is discovered and reused in one helper invocation, with reused=true and no second server started.",
+      "files": [],
+      "expectations": [
+        "One catalog-session.py open invocation reuses the existing exact-notebook session and reports reused=true.",
+        "No new marimo server or kernel is started.",
+        "The result is reported in well under ten seconds.",
+        "The report repeats the live URL, session id, and cell-state summary."
+      ]
     }
   ]
 }

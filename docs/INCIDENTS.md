@@ -25,6 +25,11 @@ A rule belongs in a `SKILL.md` only when an agent must make a decision; determin
 | `summary.json` and an index notebook were materially used only by dmx | Do not impose indexing on every catalog | Removed from the shared contract |
 | The automatic research red-team hook had no retained cache evidence across five audited catalogs | Keep research review outside this mechanical catalog skill | Hook and generic research method removed |
 | A fresh YNAB worktree could not discover installed skills | Put exact restoration commands in tracked project guidance | Scaffolded `AGENTS.md`, not a self-bootstrap rule |
+| ks3p: a run-only request took ~15 minutes because the compose workflow loaded research context, hand-rolled tunnels, and re-proved session state | Route by request class; run-only requests follow a fast path with one deterministic `open` command | `SKILL.md` routing and `scripts/catalog-session.py` |
+| ks3p: a healthy registered session could still hold only never-run cells | `open` and `run` execute cells, wait for a terminal state, and report an explicit cell summary; readiness is never claimed without it | `scripts/catalog-session.py` and regression tests |
+| ks3p: sessions bound only to 127.0.0.1 forced SSH tunnels even when the user could reach the host directly | `--host` and `--url-host` separate the bind address from the reported URL | `scripts/catalog-session.py` and the fast path |
+| ks3p: a stale server could outlive a moved or trashed worktree and stay invisible from surviving checkouts | `status` lists sessions recorded by other roots; `status`/`stop` accept `--root` | `scripts/catalog-session.py` and regression tests |
+| ks3p: rerunning kernel cells after an external file edit would prove old code while appearing to prove the new file | File divergence is reported with a note and never triggers a silent rerun; recorded run evidence is preserved | `scripts/catalog-session.py` and regression tests |
 
 ## Add-back test
 

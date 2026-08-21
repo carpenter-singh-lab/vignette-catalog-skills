@@ -1,4 +1,4 @@
 interface:
   display_name: "Vignette Catalog Compose Notebook"
   short_description: "Run and compose vignette catalogs"
-  default_prompt: "Use $vignette-catalog-compose-notebook to set up this catalog or answer a data question by reusing its helpers in a live marimo kernel."
+  default_prompt: "Use $vignette-catalog-compose-notebook to open a catalog notebook or answer a data question by reusing its helpers in a live marimo kernel."
