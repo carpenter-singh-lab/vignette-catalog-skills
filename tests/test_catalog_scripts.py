@@ -10,6 +10,7 @@ import importlib.util
 import json
 import multiprocessing
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -212,6 +213,221 @@ class SessionTests(unittest.TestCase):
             (root / ".env").write_text("TOKEN_REF=op://vault/item # comment\n")
             with mock.patch.dict(os.environ, {}, clear=True):
                 SESSION.check_auth(root)
+
+
+class HostTests(unittest.TestCase):
+    def test_probe_host_maps_wildcards_to_loopback(self) -> None:
+        self.assertEqual(SESSION.probe_host("0.0.0.0"), "127.0.0.1")
+        self.assertEqual(SESSION.probe_host("::"), "127.0.0.1")
+        self.assertEqual(SESSION.probe_host("127.0.0.1"), "127.0.0.1")
+        self.assertEqual(SESSION.probe_host("100.64.1.2"), "100.64.1.2")
+
+    def test_browser_url_separates_bind_from_report(self) -> None:
+        self.assertEqual(
+            SESSION.browser_url("127.0.0.1", None, 2718), "http://127.0.0.1:2718"
+        )
+        self.assertEqual(
+            SESSION.browser_url("0.0.0.0", "spirit.example.ts.net", 2718),
+            "http://spirit.example.ts.net:2718",
+        )
+        with self.assertRaises(SystemExit):
+            SESSION.browser_url("0.0.0.0", None, 2718)
+
+
+class CellStateTests(unittest.TestCase):
+    def report(self, cells, defined=1, defs_total=1):
+        return {"cells": cells, "defined": defined, "defs_total": defs_total}
+
+    def test_summarize_cells_counts_and_errors(self) -> None:
+        report = self.report(
+            [
+                {"id": "a", "name": "setup", "status": "idle", "errors": []},
+                {"id": "b", "name": "", "status": "running", "errors": []},
+                {"id": "c", "name": "plot", "status": "idle", "errors": ["boom"]},
+            ]
+        )
+        summary = SESSION.summarize_cells(report)
+        self.assertEqual(
+            (summary["total"], summary["idle"], summary["busy"], summary["errored"]),
+            (3, 2, 1, 1),
+        )
+        self.assertEqual(summary["errors"], ["plot: boom"])
+        self.assertEqual(SESSION.summarize_cells(None)["total"], -1)
+
+    def test_decide_run(self) -> None:
+        idle = self.report(
+            [{"id": "a", "name": "", "status": "idle", "errors": []}],
+            defined=1,
+            defs_total=1,
+        )
+        errored = self.report(
+            [{"id": "a", "name": "", "status": "idle", "errors": ["boom"]}]
+        )
+        uninstantiated = self.report(
+            [{"id": "a", "name": "", "status": "idle", "errors": []}],
+            defined=0,
+            defs_total=3,
+        )
+        unknown = self.report(
+            [{"id": "a", "name": "", "status": "idle", "errors": []}],
+            defined=-1,
+            defs_total=0,
+        )
+        self.assertTrue(SESSION.decide_run(None, "sha"))
+        self.assertTrue(SESSION.decide_run(errored, "sha"))
+        self.assertTrue(SESSION.decide_run(uninstantiated, "sha"))
+        self.assertTrue(SESSION.decide_run(unknown, None))
+        self.assertFalse(SESSION.decide_run(unknown, "sha"))
+        # A diverged file must not trigger a rerun: the kernel would run the
+        # old code while appearing to prove the new file.
+        self.assertFalse(SESSION.decide_run(idle, "old-sha"))
+        self.assertFalse(SESSION.decide_run(idle, "sha"))
+        self.assertFalse(SESSION.decide_run(idle, None))
+
+
+class ReuseTests(unittest.TestCase):
+    def make_state(self, root, port, notebook, **overrides):
+        command = f"marimo edit --host 127.0.0.1 --port {port} {notebook}"
+        state = {
+            "pid": 4242,
+            "pgid": 4242,
+            "port": port,
+            "session": "session-id",
+            "notebook": str(notebook),
+            "log": str(root / "marimo.log"),
+            "root": str(root),
+            "host": "127.0.0.1",
+            "url": f"http://127.0.0.1:{port}",
+            "process_start": "birth",
+            "process_command": command,
+            "process_marker": "0" * 32,
+            "last_run": None,
+            "last_run_sha": None,
+        }
+        state.update(overrides)
+        path = SESSION.state_path(root, port)
+        path.write_text(json.dumps(state))
+        self.addCleanup(path.unlink, missing_ok=True)
+        return state
+
+    def live_process_mocks(self, state):
+        return (
+            mock.patch.object(
+                SESSION,
+                "process_identity",
+                return_value=(
+                    state["process_start"],
+                    state["process_command"],
+                    state["pgid"],
+                ),
+            ),
+            mock.patch.object(SESSION, "process_has_marker", return_value=True),
+            mock.patch.object(SESSION, "health", return_value=True),
+        )
+
+    def test_exact_notebook_reuse_and_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebooks = root / "notebooks"
+            notebooks.mkdir()
+            target = notebooks / "nb05.py"
+            other = notebooks / "nb01.py"
+            target.write_text("pass\n")
+            other.write_text("pass\n")
+            state = self.make_state(root, 45690, target)
+            identity, marker, healthy = self.live_process_mocks(state)
+            with identity, marker, healthy:
+                facts = SESSION.find_reusable(root, target)
+                self.assertIsNotNone(facts)
+                self.assertEqual(facts["port"], 45690)
+                self.assertEqual(facts["notebook"], str(target))
+                self.assertIsNone(SESSION.find_reusable(root, other))
+
+    def test_missing_worktree_blocks_reuse(self) -> None:
+        parent = tempfile.mkdtemp()
+        root = Path(parent) / "gone"
+        root.mkdir()
+        notebook = root / "notebooks" / "nb01.py"
+        notebook.parent.mkdir()
+        notebook.write_text("pass\n")
+        state = self.make_state(root, 45691, notebook)
+        shutil.rmtree(root)
+        identity, marker, healthy = self.live_process_mocks(state)
+        with identity, marker, healthy:
+            facts = SESSION.session_facts(root, 45691)
+            self.assertEqual(facts["worktree"], "missing")
+            self.assertEqual(facts["notebook_file"], "missing")
+            self.assertFalse(SESSION.facts_reusable(facts, notebook))
+        shutil.rmtree(parent, ignore_errors=True)
+
+    def test_changed_notebook_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "notebooks" / "nb01.py"
+            notebook.parent.mkdir()
+            notebook.write_text("value = 1\n")
+            state = self.make_state(
+                root, 45692, notebook, last_run_sha="not-the-current-sha"
+            )
+            identity, marker, healthy = self.live_process_mocks(state)
+            with identity, marker, healthy:
+                facts = SESSION.session_facts(root, 45692)
+                self.assertEqual(facts["notebook_file"], "changed-since-run")
+                self.assertTrue(SESSION.facts_reusable(facts, notebook))
+
+    def test_status_cleans_dead_and_malformed_state(self) -> None:
+        import argparse
+        import contextlib
+        import io
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "notebooks" / "nb01.py"
+            notebook.parent.mkdir()
+            notebook.write_text("pass\n")
+            dead = self.make_state(root, 45693, notebook)
+            malformed_path = SESSION.state_path(root, 45694)
+            malformed_path.write_text("not json")
+            self.addCleanup(malformed_path.unlink, missing_ok=True)
+            arguments = argparse.Namespace(
+                port=None, cells=False, json=True, root=str(root)
+            )
+            buffer = io.StringIO()
+            with (
+                mock.patch.object(SESSION, "process_identity", return_value=None),
+                mock.patch.object(SESSION, "health", return_value=False),
+                contextlib.redirect_stdout(buffer),
+            ):
+                SESSION.status(arguments)
+            document = json.loads(buffer.getvalue())
+            by_port = {entry["port"]: entry for entry in document["sessions"]}
+            self.assertEqual(by_port[45693]["process"], "dead")
+            self.assertTrue(by_port[45693]["removed_stale_state"])
+            self.assertEqual(by_port[45694]["state"], "malformed")
+            self.assertTrue(by_port[45694]["removed_stale_state"])
+            self.assertFalse(SESSION.state_path(root, 45693).exists())
+            self.assertFalse(malformed_path.exists())
+            self.assertEqual(dead["port"], 45693)
+
+    def test_foreign_sessions_surface_orphaned_worktrees(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "current"
+            root.mkdir()
+            orphan_root = Path(directory) / "orphan"
+            orphan_root.mkdir()
+            orphan_notebook = orphan_root / "notebooks" / "nb01.py"
+            orphan_notebook.parent.mkdir()
+            orphan_notebook.write_text("pass\n")
+            self.make_state(orphan_root, 45695, orphan_notebook)
+            shutil.rmtree(orphan_root)
+            entries = SESSION.foreign_sessions(root)
+            match = [
+                entry
+                for entry in entries
+                if entry["root"] == str(orphan_root) and entry["port"] == 45695
+            ]
+            self.assertEqual(len(match), 1)
+            self.assertEqual(match[0]["worktree"], "missing")
 
 
 class ScaffoldTests(unittest.TestCase):

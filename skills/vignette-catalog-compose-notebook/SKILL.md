@@ -1,38 +1,69 @@
 ---
 name: vignette-catalog-compose-notebook
 description: >-
-  Work in an existing vignette catalog: set it up, run or inspect its marimo
-  notebooks, and answer data questions by reusing their @app.function helpers
+  Work in an existing vignette catalog: open or rerun its marimo notebooks,
+  set it up, and answer data questions by reusing their @app.function helpers
   in a live kernel. Use whenever a repository has catalog.toml and the user
-  asks to get started, run notebooks, explore the data, make an analysis or
-  figure, or compose a new notebook. Do not use for generic notebooks or for
-  creating a new catalog.
+  asks to open or run a notebook, get started, explore the data, make an
+  analysis or figure, or compose a new notebook. Do not use for generic
+  notebooks or for creating a new catalog.
 allowed-tools: Bash, Read, Write, Glob, Grep
 ---
 
 # Work in a vignette catalog
 
 A catalog is a `catalog.toml` plus self-contained marimo notebooks that double as worked examples and importable helper modules.
+Resolve `<skill-dir>` to this installed skill and execute its Python scripts directly so their `uv` shebangs apply.
+`<skill-dir>/scripts/catalog-session.py` owns the whole session lifecycle: it starts, reuses, inspects, runs, and stops catalog kernels deterministically and survives shell wrappers.
+Never launch marimo through ad hoc `nohup` or backgrounding, and never reconstruct session state from `pgrep`, `ss`, `curl`, or `/api/sessions` by hand.
+If the helper fails, report its exact output before trying anything else.
+
+## Route the request first
+
+- Open, run, or view a specific notebook, or "get this catalog running": follow the fast path below, then stop.
+  Do not read the notebook contract, unrelated notebooks, or data references on this path.
+- Change inputs in a notebook that is already live: reuse its session through `marimo-pair` code mode.
+  Do not start a second kernel unless the current one is irrecoverable.
+- Compose a new notebook or answer a data question: follow the compose workflow.
+- Open-ended research: use the compose workflow for mechanics; research methodology stays with the user and repository, not this skill.
+
+## Fast path: open an exact notebook
+
+1. Read the repository's `AGENTS.md` and `catalog.toml`.
+   You need only auth requirements and `[getting_started].first_notebook`; skip caveats and notebook code that launching does not require.
+
+2. Run one command; it reuses a healthy session for that exact notebook or starts one, ensures the cells ran, and prints the result:
+
+   ```bash
+   <skill-dir>/scripts/catalog-session.py open [notebooks/<name>.py]
+   ```
+
+   Omitting the notebook opens `[getting_started].first_notebook`.
+   When the user can already reach this machine directly (for example over Tailscale or a LAN), pass `--host <reachable-address>` so the printed URL works without a tunnel; set up SSH forwarding only when no direct route exists.
+
+3. Report `url=` and `session=` and the `cells=` line verbatim.
+   `cell_error=` lines mean the notebook ran but has failing cells: report them; the session stays live for iteration.
+   Answer any follow-up about session state with `<skill-dir>/scripts/catalog-session.py status --cells`, rerun cells with `run <port>`, and stop a session you own with `stop <port>`.
+
+## Compose workflow
+
 Use `marimo-notebook` for general notebook authoring and `marimo-pair` for every live-kernel action.
 Repository instructions, `catalog.toml`, and this skill's notebook contract override generic `marimo-notebook` advice when they are more specific.
 If either project skill is absent, stop and give the user the repository's documented install command rather than installing it implicitly.
-Resolve `<skill-dir>` to this installed skill and execute its Python scripts directly so their `uv` shebangs apply.
-
-## Workflow
 
 1. Read the repository's `AGENTS.md`, `catalog.toml`, and any path named by `[data].caveats`.
    Use the manifest to find likely notebooks, then read their actual code and docstrings.
    The manifest is a curated routing table, not necessarily an inventory of every notebook or helper.
 
-2. Connect to the relevant notebook with `marimo-pair`.
-   Discover an existing session first.
-   If none fits, run `<skill-dir>/scripts/catalog-session.py start [notebook]`; omitting the notebook starts `[getting_started].first_notebook`.
-   The command prints the URL, port, and session id needed to target the kernel explicitly.
+2. Connect to the relevant notebook with `marimo-pair`, using the session from `catalog-session.py open` (it reuses an existing healthy session before starting a new one).
+   The output has the URL, port, and session id needed to target the kernel explicitly.
+   During a live session the active runtime is the source of truth; the saved file is the durable artifact you validate at the end.
 
 3. Take the shortest path that answers the question.
    Change inputs in an existing notebook when its workflow already fits.
    Otherwise create a composed notebook and import the closest helpers instead of recreating their requests, parsing, joins, or plots.
    Read [references/notebook-contract.md](references/notebook-contract.md) when authoring or changing a notebook.
+   A composed notebook needs its own kernel: start it with `catalog-session.py start notebooks/<name>.py`.
 
 4. Work through the live kernel.
    Use `marimo-pair` code mode for durable cell edits, run each changed cell, and inspect the returned tables and rendered figures before interpreting them.
@@ -53,7 +84,4 @@ Resolve `<skill-dir>` to this installed skill and execute its Python scripts dir
    Stop a session you no longer need with `<skill-dir>/scripts/catalog-session.py stop <port>`.
    Promote a composed notebook into `catalog.toml` only when the user wants it curated as a reusable vignette.
 
-## Running a catalog without composing
-
-When the user only wants setup or verification, start the requested notebook, run all cells through `marimo-pair`, inspect one meaningful output, and report the URL.
 When asked to verify the whole catalog, enumerate the actual notebook files rather than assuming `catalog.toml` is exhaustive, and validate each in a disposable worktree or archive if the catalog tracks generated snapshots.
