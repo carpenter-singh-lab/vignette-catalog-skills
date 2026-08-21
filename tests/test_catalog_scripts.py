@@ -65,6 +65,21 @@ def hold_lock(root: str, port: int, delay: float, events) -> None:
         events.put(("exit", time.monotonic()))
 
 
+def hold_catalog_lock(root: str, delay: float, events) -> None:
+    with SESSION.catalog_lock(Path(root)):
+        events.put(("enter", time.monotonic()))
+        time.sleep(delay)
+        events.put(("exit", time.monotonic()))
+
+
+def unlink_state_under_lock(root: str, port: int, delay: float, events) -> None:
+    with SESSION.session_lock(Path(root), port):
+        SESSION.state_path(Path(root), port).unlink(missing_ok=True)
+        events.put(("locked", time.monotonic()))
+        time.sleep(delay)
+        events.put(("released", time.monotonic()))
+
+
 class SessionTests(unittest.TestCase):
     def test_lock_serializes_same_catalog_and_port(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -244,15 +259,48 @@ class CellStateTests(unittest.TestCase):
                 {"id": "a", "name": "setup", "status": "idle", "errors": []},
                 {"id": "b", "name": "", "status": "running", "errors": []},
                 {"id": "c", "name": "plot", "status": "idle", "errors": ["boom"]},
+                {"id": "d", "name": "", "status": "stale", "errors": []},
+                {"id": "e", "name": "", "status": "cancelled", "errors": []},
+                {"id": "f", "name": "", "status": "disabled", "errors": []},
             ]
         )
         summary = SESSION.summarize_cells(report)
         self.assertEqual(
-            (summary["total"], summary["idle"], summary["busy"], summary["errored"]),
-            (3, 2, 1, 1),
+            (
+                summary["total"],
+                summary["ok"],
+                summary["busy"],
+                summary["stale"],
+                summary["disabled"],
+                summary["errored"],
+            ),
+            (6, 2, 1, 2, 1, 1),
         )
         self.assertEqual(summary["errors"], ["plot: boom"])
         self.assertEqual(SESSION.summarize_cells(None)["total"], -1)
+
+    def test_stale_cells_are_never_reported_ready(self) -> None:
+        # marimo reports "stale" for never-run and invalidated code; treating
+        # everything non-busy as ok would claim readiness on a dead kernel.
+        stale_only = self.report(
+            [
+                {"id": "a", "name": "", "status": "stale", "errors": []},
+                {"id": "b", "name": "", "status": "stale", "errors": []},
+            ],
+            defined=1,
+            defs_total=1,
+        )
+        mixed = self.report(
+            [
+                {"id": "a", "name": "", "status": "idle", "errors": []},
+                {"id": "b", "name": "", "status": "stale", "errors": []},
+            ],
+            defined=1,
+            defs_total=1,
+        )
+        self.assertEqual(SESSION.summarize_cells(stale_only)["stale"], 2)
+        self.assertTrue(SESSION.decide_run(stale_only, "sha"))
+        self.assertTrue(SESSION.decide_run(mixed, "sha"))
 
     def test_decide_run(self) -> None:
         idle = self.report(
@@ -409,6 +457,17 @@ class ReuseTests(unittest.TestCase):
             self.assertFalse(malformed_path.exists())
             self.assertEqual(dead["port"], 45693)
 
+    def test_valid_json_with_malformed_schema_is_reported_not_crashed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            port = 45700
+            path = SESSION.state_path(root, port)
+            path.write_text(json.dumps({"root": str(root), "port": "not-an-int"}))
+            self.addCleanup(path.unlink, missing_ok=True)
+            with mock.patch.object(SESSION, "health", return_value=False):
+                facts = SESSION.session_facts(root, port)
+            self.assertEqual(facts["state"], "malformed")
+
     def test_foreign_sessions_surface_orphaned_worktrees(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "current"
@@ -428,6 +487,153 @@ class ReuseTests(unittest.TestCase):
             ]
             self.assertEqual(len(match), 1)
             self.assertEqual(match[0]["worktree"], "missing")
+
+
+class LockingTests(unittest.TestCase):
+    def test_catalog_lock_serializes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            context = multiprocessing.get_context("fork")
+            events = context.Queue()
+            first = context.Process(
+                target=hold_catalog_lock, args=(directory, 0.5, events)
+            )
+            second = context.Process(
+                target=hold_catalog_lock, args=(directory, 0.0, events)
+            )
+            first.start()
+            events.get(timeout=2)
+            second.start()
+            first_exit = events.get(timeout=2)
+            second_enter = events.get(timeout=2)
+            events.get(timeout=2)
+            first.join(timeout=2)
+            second.join(timeout=2)
+            self.assertEqual(first.exitcode, 0)
+            self.assertEqual(second.exitcode, 0)
+            self.assertGreaterEqual(second_enter[1], first_exit[1])
+            SESSION.catalog_lock_path(Path(directory)).unlink(missing_ok=True)
+
+    def test_update_state_cannot_resurrect_removed_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            port = 45697
+            path = SESSION.state_path(root, port)
+            path.write_text(json.dumps({"port": port, "root": str(root)}))
+            context = multiprocessing.get_context("fork")
+            events = context.Queue()
+            remover = context.Process(
+                target=unlink_state_under_lock, args=(directory, port, 0.5, events)
+            )
+            remover.start()
+            locked = events.get(timeout=2)
+            self.assertEqual(locked[0], "locked")
+            # The state was unlinked under the lock; update_state must wait
+            # for the lock and then decline to recreate the file.
+            SESSION.update_state(root, port, last_run=1.0)
+            released = events.get(timeout=2)
+            self.assertEqual(released[0], "released")
+            remover.join(timeout=2)
+            self.assertFalse(path.exists())
+            SESSION.lock_path(root, port).unlink(missing_ok=True)
+
+    def test_update_state_on_missing_state_is_a_no_op(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            SESSION.update_state(root, 45698, last_run=1.0)
+            self.assertFalse(SESSION.state_path(root, 45698).exists())
+            SESSION.lock_path(root, 45698).unlink(missing_ok=True)
+
+
+class DivergedOpenTests(unittest.TestCase):
+    def open_arguments(self, notebook: Path, run: str):
+        import argparse
+
+        return argparse.Namespace(
+            notebook=str(notebook),
+            host=None,
+            url_host=None,
+            port=None,
+            timeout=60,
+            run_timeout=600,
+            run=run,
+            json=False,
+        )
+
+    def run_open(self, run: str) -> tuple[mock.Mock, str]:
+        import contextlib
+        import io
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "catalog.toml").write_text("")
+            notebook = root / "notebooks" / "nb01.py"
+            notebook.parent.mkdir()
+            notebook.write_text("value = 1\n")
+            facts = {
+                "port": 45699,
+                "host": "127.0.0.1",
+                "url": "http://127.0.0.1:45699",
+                "notebook": str(notebook),
+                "session": "sid",
+                "pid": 4242,
+                "log": str(root / "marimo.log"),
+                "notebook_file": "changed-since-run",
+                "last_run_sha": "old-sha",
+            }
+            errored_report = {
+                "cells": [{"id": "a", "name": "", "status": "idle", "errors": ["boom"]}],
+                "defined": 1,
+                "defs_total": 1,
+            }
+            run_mock = mock.Mock(return_value=errored_report)
+            buffer = io.StringIO()
+            with (
+                mock.patch.object(SESSION, "catalog_root", return_value=root),
+                mock.patch.object(SESSION, "find_reusable", return_value=facts),
+                mock.patch.object(SESSION, "resolve_session", return_value="sid"),
+                mock.patch.object(
+                    SESSION, "wait_for_idle", return_value=errored_report
+                ),
+                mock.patch.object(SESSION, "run_all_cells", run_mock),
+                contextlib.redirect_stdout(buffer),
+            ):
+                SESSION.open_session(self.open_arguments(notebook, run))
+            return run_mock, buffer.getvalue()
+
+    def test_auto_open_never_reruns_a_diverged_kernel(self) -> None:
+        # An errored report would normally trigger a rerun, but after an
+        # external file edit that would execute the old kernel code while
+        # appearing to prove the new file.
+        run_mock, output = self.run_open("auto")
+        run_mock.assert_not_called()
+        self.assertIn("ran=skipped", output)
+        self.assertIn("note=", output)
+
+    def test_always_reruns_but_never_records_the_new_sha(self) -> None:
+        run_mock, output = self.run_open("always")
+        run_mock.assert_called_once()
+        self.assertIsNone(run_mock.call_args.args[4])
+        self.assertIn("ran=all", output)
+
+
+class EmitTests(unittest.TestCase):
+    def test_json_output_keeps_every_error_and_note(self) -> None:
+        import contextlib
+        import io
+
+        pairs = [
+            ("url", "http://127.0.0.1:1"),
+            ("cell_error", "a: boom"),
+            ("cell_error", "b: crash"),
+            ("note", "n1"),
+        ]
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            SESSION.emit(pairs, as_json=True)
+        document = json.loads(buffer.getvalue())
+        self.assertEqual(document["cell_errors"], ["a: boom", "b: crash"])
+        self.assertEqual(document["notes"], ["n1"])
+        self.assertEqual(document["url"], "http://127.0.0.1:1")
 
 
 class ScaffoldTests(unittest.TestCase):

@@ -45,7 +45,11 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 SESSION_MARKER_ENV = "VIGNETTE_CATALOG_SESSION_MARKER"
 SESSION_MARKER = re.compile(r"[0-9a-f]{32}\Z")
 WILDCARD_HOSTS = {"0.0.0.0", "::", ""}
+# marimo 0.23.16 cell statuses: "idle" is the only ran-and-settled state;
+# "stale" covers never-run and invalidated code; disabled cells never run.
+OK_STATUSES = {"idle"}
 BUSY_STATUSES = {"queued", "running", "pending"}
+DISABLED_STATUSES = {"disabled", "disabled-transitively"}
 LOG_TAIL_LINES = 40
 DIVERGED_NOTE = (
     "notebook file changed since the last recorded run; the kernel still holds "
@@ -282,10 +286,34 @@ def cell_report(port: int, host: str, session_id: str, timeout: float) -> dict |
 
 
 def summarize_cells(report: dict | None) -> dict[str, object]:
+    """Count cells by explicit status; anything unrecognized counts as stale.
+
+    Readiness must never be inferred from "not busy": marimo reports "stale"
+    for never-run and invalidated code, and other non-terminal states exist
+    (cancelled, interrupted, marimo-error), so only "idle" counts as ok.
+    """
     if report is None:
-        return {"total": -1, "idle": -1, "busy": -1, "errored": -1, "errors": []}
+        return {
+            "total": -1,
+            "ok": -1,
+            "busy": -1,
+            "stale": -1,
+            "disabled": -1,
+            "errored": -1,
+            "errors": [],
+        }
     cells = report["cells"]
-    busy = [c for c in cells if c.get("status") in BUSY_STATUSES]
+    ok = busy = stale = disabled = 0
+    for cell in cells:
+        status = cell.get("status")
+        if status in OK_STATUSES:
+            ok += 1
+        elif status in BUSY_STATUSES:
+            busy += 1
+        elif status in DISABLED_STATUSES:
+            disabled += 1
+        else:
+            stale += 1
     errored = [c for c in cells if c.get("errors")]
     errors = [
         f"{cell.get('name') or cell.get('id')}: {error}"
@@ -294,11 +322,21 @@ def summarize_cells(report: dict | None) -> dict[str, object]:
     ]
     return {
         "total": len(cells),
-        "idle": len(cells) - len(busy),
-        "busy": len(busy),
+        "ok": ok,
+        "busy": busy,
+        "stale": stale,
+        "disabled": disabled,
         "errored": len(errored),
         "errors": errors,
     }
+
+
+def cells_line(summary: dict[str, object]) -> str:
+    return (
+        f"total={summary['total']} ok={summary['ok']} busy={summary['busy']} "
+        f"stale={summary['stale']} disabled={summary['disabled']} "
+        f"errored={summary['errored']}"
+    )
 
 
 def report_is_busy(report: dict | None) -> bool:
@@ -310,14 +348,15 @@ def report_is_busy(report: dict | None) -> bool:
 def decide_run(report: dict | None, last_run_sha: str | None) -> bool:
     """Whether cells need an explicit run to make readiness truthful.
 
-    A changed notebook file never triggers a rerun: the kernel still holds the
-    code it loaded at start, so rerunning would prove the old code while looking
-    like it proved the new file. That divergence is reported instead.
+    Callers gate this on the notebook file not having diverged: the kernel
+    still holds the code it loaded at start, so an automatic rerun after an
+    external file edit would prove the old code while looking like it proved
+    the new file. Divergence is reported, never silently rerun.
     """
     if report is None:
         return True
     summary = summarize_cells(report)
-    if summary["errored"]:
+    if summary["errored"] or summary["stale"]:
         return True
     defined = report.get("defined", -1)
     defs_total = report.get("defs_total", 0)
@@ -365,6 +404,29 @@ def lock_path(root: Path, port: int) -> Path:
 @contextlib.contextmanager
 def session_lock(root: Path, port: int):
     with lock_path(root, port).open("a+") as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream, fcntl.LOCK_UN)
+
+
+def catalog_lock_path(root: Path) -> Path:
+    return (
+        Path(tempfile.gettempdir())
+        / f"vignette-catalog-catalog-{catalog_id(root)}.lock"
+    )
+
+
+@contextlib.contextmanager
+def catalog_lock(root: Path):
+    """Serialize find-or-create decisions for one catalog.
+
+    Two concurrent opens of the same notebook must not both conclude that no
+    session exists and start duplicate kernels; the second waits here and then
+    sees the first launch's state. Lock order is always catalog before port.
+    """
+    with catalog_lock_path(root).open("a+") as stream:
         fcntl.flock(stream, fcntl.LOCK_EX)
         try:
             yield
@@ -434,13 +496,20 @@ def write_state(path: Path, state: dict[str, object]) -> None:
 
 
 def update_state(root: Path, port: int, **fields: object) -> None:
+    """Read-modify-write one state file under its port lock.
+
+    The lock plus the existence re-check stop this from resurrecting a state
+    file that a concurrent stop or status cleanup has just removed.
+    """
     path = state_path(root, port)
-    try:
-        state = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return
-    state.update(fields)
-    write_state(path, state)
+    with session_lock(root, port):
+        try:
+            state = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return
+        state.update(fields)
+        if path.is_file():
+            write_state(path, state)
 
 
 def read_state(root: Path, port: int) -> dict | None:
@@ -503,7 +572,12 @@ def session_facts(root: Path, port: int) -> dict[str, object]:
             "last_run_sha": state.get("last_run_sha"),
         }
     )
-    if state.get("root") != str(root) or int(state.get("port", -1)) != port:
+    try:
+        recorded_port = int(state.get("port", -1))
+    except (TypeError, ValueError):
+        facts["state"] = "malformed"
+        return facts
+    if state.get("root") != str(root) or recorded_port != port:
         facts["state"] = "mismatched"
         return facts
     facts["process"] = verify_process(state)
@@ -623,7 +697,13 @@ def run_all_cells(
 
 def emit(pairs: list[tuple[str, object]], as_json: bool) -> None:
     if as_json:
-        print(json.dumps(dict(pairs), indent=2))
+        document: dict[str, object] = {}
+        for key, value in pairs:
+            if key in ("cell_error", "note"):
+                document.setdefault(f"{key}s", []).append(value)
+            else:
+                document[key] = value
+        print(json.dumps(document, indent=2))
     else:
         for key, value in pairs:
             print(f"{key}={value}")
@@ -646,13 +726,7 @@ def session_result(
         ("log", facts_or_state["log"]),
         ("reused", str(reused).lower()),
         ("ran", ran),
-        (
-            "cells",
-            (
-                f"total={summary['total']} idle={summary['idle']} "
-                f"busy={summary['busy']} errored={summary['errored']}"
-            ),
-        ),
+        ("cells", cells_line(summary)),
     ]
     for error in summary["errors"]:
         pairs.append(("cell_error", error))
@@ -809,7 +883,24 @@ def open_session(args: argparse.Namespace) -> int:
     args.host = checked_host(args.host)
     current_sha = notebook_sha(notebook)
 
-    facts = find_reusable(root, notebook)
+    # The find-or-create decision is serialized per catalog so two concurrent
+    # opens of the same notebook cannot both launch a kernel; the second one
+    # waits and then reuses the first launch's recorded state.
+    state = None
+    startup_seconds = 0.0
+    with catalog_lock(root):
+        facts = find_reusable(root, notebook)
+        if facts is None:
+            host = args.host or "127.0.0.1"
+            port = args.port or free_port(host)
+            started = time.monotonic()
+            with session_lock(root, port):
+                recorded_group(root, port)
+                state = launch(
+                    root, notebook, port, host, args.url_host, args.timeout
+                )
+            startup_seconds = time.monotonic() - started
+
     if facts is not None:
         port = int(facts["port"])
         host = str(facts["host"])
@@ -828,8 +919,10 @@ def open_session(args: argparse.Namespace) -> int:
         report = wait_for_idle(port, host, session_id, args.run_timeout)
         ran = "skipped"
         diverged = facts.get("notebook_file") == "changed-since-run"
-        if args.run != "never" and (
-            args.run == "always" or decide_run(report, facts.get("last_run_sha"))
+        if args.run == "always" or (
+            args.run == "auto"
+            and not diverged
+            and decide_run(report, facts.get("last_run_sha"))
         ):
             report = run_all_cells(
                 root,
@@ -847,13 +940,6 @@ def open_session(args: argparse.Namespace) -> int:
         )
         return 0
 
-    host = args.host or "127.0.0.1"
-    port = args.port or free_port(host)
-    started = time.monotonic()
-    with session_lock(root, port):
-        recorded_group(root, port)
-        state = launch(root, notebook, port, host, args.url_host, args.timeout)
-    startup_seconds = time.monotonic() - started
     ran = "none"
     report = None
     run_seconds = 0.0
@@ -861,8 +947,8 @@ def open_session(args: argparse.Namespace) -> int:
         started = time.monotonic()
         report = run_all_cells(
             root,
-            port,
-            host,
+            int(state["port"]),
+            str(state["host"]),
             str(state["session"]),
             current_sha,
             args.run_timeout,
@@ -908,27 +994,31 @@ def status(args: argparse.Namespace) -> int:
     ports = [args.port] if args.port else state_ports(root)
     blocks: list[dict[str, object]] = []
     for port in ports:
-        facts = session_facts(root, port)
-        if facts.get("state") == "malformed" or facts.get("process") in (
-            "dead",
-            "mismatch",
-        ):
-            Path(str(facts["state_path"])).unlink(missing_ok=True)
-            facts["removed_stale_state"] = True
-            blocks.append(facts)
-            continue
+        # Re-verify and clean under the port lock so a session that start or
+        # stop is concurrently touching is not misjudged or unlinked from
+        # under them.
+        with session_lock(root, port):
+            facts = session_facts(root, port)
+            if facts.get("state") == "malformed" or facts.get("process") in (
+                "dead",
+                "mismatch",
+            ):
+                Path(str(facts["state_path"])).unlink(missing_ok=True)
+                facts["removed_stale_state"] = True
+                blocks.append(facts)
+                continue
         if facts.get("health") == "ok" and args.cells:
             session_id = resolve_session(
-                port, str(facts["host"]), str(facts["session"]), Path(str(facts["notebook"]))
+                port,
+                str(facts["host"]),
+                str(facts["session"]),
+                Path(str(facts["notebook"])),
             )
             if session_id:
                 summary = summarize_cells(
                     cell_report(port, str(facts["host"]), session_id, timeout=30)
                 )
-                facts["cells"] = (
-                    f"total={summary['total']} idle={summary['idle']} "
-                    f"busy={summary['busy']} errored={summary['errored']}"
-                )
+                facts["cells"] = cells_line(summary)
                 facts["cell_errors"] = summary["errors"]
         blocks.append(facts)
     others = foreign_sessions(root)
