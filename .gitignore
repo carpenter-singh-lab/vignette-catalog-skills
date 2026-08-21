@@ -4,3 +4,4 @@ __pycache__/
 # Third-party project skills are recorded in skills-lock.json.
 .agents/
 .claude/skills/marimo-pair
+.kata.local.toml
