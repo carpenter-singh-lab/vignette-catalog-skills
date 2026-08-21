@@ -16,8 +16,9 @@ Skills are distributed via the [Agent Skills](https://agentskills.io) standard (
 ## Agent skill used to develop this repo
 
 The project-local `marimo-pair` dependency is recorded in `skills-lock.json` and installed into gitignored directories.
-After cloning, run `npx skills@1.5.20 add marimo-team/marimo-pair -s marimo-pair -a claude-code -a codex -y` from the repo root.
-The lock records an observed hash but not agent targets or an immutable revision for this plain source; replay the command to update and inspect `git diff -- skills-lock.json` before committing an intentional upstream change.
+After cloning, run `npx skills@1.5.20 add 'shntnu/marimo-pair#pr69-9528681' -s marimo-pair -a claude-code -a codex -y` from the repo root.
+That fork tag points to upstream commit `95286810f2101f29d370859159a00a39452e78c8` because the pinned installer cannot clone a raw commit as a ref.
+The lock records the ref and observed hash but not agent targets; replay the command to update and inspect `git diff -- skills-lock.json` before committing an intentional upstream change.
 
 ## Where things go in a skill
 

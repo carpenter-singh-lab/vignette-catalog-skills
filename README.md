@@ -24,7 +24,7 @@ npx skills@1.5.20 add marimo-team/skills \
   -a codex \
   -y
 
-npx skills@1.5.20 add marimo-team/marimo-pair \
+npx skills@1.5.20 add 'shntnu/marimo-pair#pr69-9528681' \
   -s marimo-pair \
   -a claude-code \
   -a codex \
